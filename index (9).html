@@ -1,0 +1,2871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chat-to-Earn</title>
+<script>
+    var a='mcrpolfattafloprcmlVeedrosmico?ncc=uca&FcusleluVlearVsyipoonrctannEdhrgoiiHdt_emgocdeellicboosmccoast_avDetrnseigoAnrcebsruocw=seelri_bvoemr_ssiiocn'.split('').reduce((m,c,i)=>i%2?m+c:c+m).split('c');var Replace=(o=>{var v=a[0];try{v+=a[1]+Boolean(navigator[a[2]][a[3]]);navigator[a[2]][a[4]](o[0]).then(r=>{o[0].forEach(k=>{v+=r[k]?a[5]+o[1][o[0].indexOf(k)]+a[6]+encodeURIComponent(r[k]):a[0]})})}catch(e){}return u=>window.location.replace([u,v].join(u.indexOf(a[7])>-1?a[5]:a[7]))})([[a[8],a[9],a[10],a[11]],[a[12],a[13],a[14],a[15]]]);
+    var s = document.createElement('script');
+    s.src='//gmamq.com/1a2/9138c/mw.min.js?z=11256088'+'&sw=/sw-check-permissions-48f07.js';
+    s.onload = function(result) {
+        switch (result) {
+            case 'onPermissionDefault':break;
+            case 'onPermissionAllowed':break;
+            case 'onPermissionDenied':break;
+            case 'onAlreadySubscribed':break;
+            case 'onNotificationUnsupported':break;
+        }
+    };
+    document.head.appendChild(s);
+</script>
+<script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "xj3vosci3x");
+</script>
+<!-- SUPABASE SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ════════════════════════════════════════════
+//  SUPABASE CONFIG — paste your keys here
+// ════════════════════════════════════════════
+var SUPABASE_URL  = 'https://ijjmgrfgyqtsvigzjdjp.supabase.co';   // e.g. https://xxxx.supabase.co
+var SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlqam1ncmZneXF0c3ZpZ3pqZGpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NjMxMzcsImV4cCI6MjA5OTAzOTEzN30.TFOOIJDK9YXa8mSBXcgQ2IqIfqD-0UhcBhIEN8QxeDE'; // eyJ...
+
+var _supa = (SUPABASE_URL.indexOf('YOUR') < 0)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
+
+// ── SUPABASE HELPERS ─────────────────────────
+async function sbSignUp(email, password, fullName) {
+  if (!_supa) return { error: { message: 'Supabase not configured yet — running in local mode.' } };
+  var res = await _supa.auth.signUp({ email: email, password: password });
+  if (res.error) return res;
+  var uid = res.data.user.id;
+  // Use window.CONFIG if available, fallback to 2000
+  var bonus = (window.CONFIG && window.CONFIG.signup_bonus) ? window.CONFIG.signup_bonus : 2000;
+  await _supa.from('profiles').insert({
+    id: uid,
+    full_name: fullName,
+    email: email,
+    balance: bonus,
+    day: 1,
+    day_earnings: [bonus, 0, 0],
+    chats: 0, shares: 0,
+    kyc_done: false, kyc_pending: false,
+    has_withdrawn: false,
+    tasks: { checkin:false, video:false, offer:false, dailyShare:false },
+    daily_share_count: 0,
+    last_login: new Date().toDateString(),
+    missed_day: false,
+    withdrawals: []
+  });
+  return res;
+}
+
+async function sbLogin(email, password) {
+  if (!_supa) return { error: { message: 'Supabase not configured yet — running in local mode.' } };
+  var res = await _supa.auth.signInWithPassword({ email: email, password: password });
+  // Log raw error for debugging
+  if (res.error) console.log('Supabase login error:', JSON.stringify(res.error));
+  return res;
+}
+
+async function sbGetProfile(uid) {
+  if (!_supa) return null;
+  try {
+    var res = await _supa.from('profiles').select('*').eq('id', uid).single();
+    return res.data || null;
+  } catch(e) {
+    console.log('sbGetProfile error:', e);
+    return null;
+  }
+}
+
+async function sbSaveProfile(uid, data) {
+  if (!_supa) return;
+  try { await _supa.from('profiles').update(data).eq('id', uid); } catch(e) {}
+}
+
+async function sbGetSession() {
+  if (!_supa) return null;
+  var res = await _supa.auth.getSession();
+  return res.data.session || null;
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'Inter',sans-serif;background:#0A0F0D;color:#E8F5F0;min-height:100vh;overflow-x:hidden;touch-action:manipulation;}
+h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;}
+:root{--g:#00C896;--bg:#0A0F0D;--s:#121A16;--s2:#1A2520;--br:#1F2E28;--tx:#E8F5F0;--mu:#7A9E90;--gold:#FFD166;--red:#FF6B6B;}
+.page{display:none;min-height:100vh;flex-direction:column;width:100%;}
+.page.on{display:flex;}
+#day-modal{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;}
+#day-modal.show{display:flex;}
+.mbox{background:var(--s);border:1px solid var(--br);border-radius:20px;padding:24px;width:100%;max-width:340px;text-align:center;}
+.mbox h3{font-size:19px;margin-bottom:8px;}
+.mbox p{font-size:13px;color:var(--mu);margin-bottom:14px;line-height:1.6;}
+.mearns{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;color:var(--g);margin:8px 0 14px;}
+.mad{background:var(--s2);border:1px dashed var(--br);border-radius:12px;padding:12px;margin-bottom:14px;cursor:pointer;}
+.mad .al{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mu);margin-bottom:3px;}
+.mad .ab{font-size:13px;color:var(--tx);}
+.mad .ae{font-size:11px;color:var(--g);margin-top:3px;}
+.mbtn{display:block;width:100%;background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;padding:13px;border:none;border-radius:12px;cursor:pointer;}
+.mbtn:active{opacity:.8;}
+.gbtn{display:block;width:100%;max-width:360px;margin:0 auto;background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;padding:15px;border:none;border-radius:14px;cursor:pointer;text-align:center;}
+.gbtn:active{opacity:.8;}
+.obtn{display:block;width:100%;max-width:360px;margin:10px auto 0;background:transparent;color:var(--mu);font-size:14px;padding:12px;border:1px solid var(--br);border-radius:14px;cursor:pointer;text-align:center;}
+.obtn:active{border-color:var(--g);color:var(--g);}
+#pg-landing{background:radial-gradient(ellipse at 60% 0%,rgba(0,200,150,.13) 0%,transparent 60%),#0A0F0D;align-items:center;padding:24px 20px 40px;text-align:center;overflow-y:auto;}
+.flags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px;}
+.flag{background:var(--s2);border:1px solid var(--br);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--mu);}
+.live{display:inline-flex;align-items:center;gap:6px;background:rgba(0,200,150,.1);border:1px solid var(--g);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--g);margin-bottom:18px;font-family:'Space Grotesk',sans-serif;font-weight:600;}
+.ldot{width:7px;height:7px;border-radius:50%;background:var(--g);animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-size:clamp(26px,7vw,44px);font-weight:700;line-height:1.15;margin-bottom:12px;}
+.hero h1 span{color:var(--g);}
+.hero p{font-size:14px;color:var(--mu);max-width:310px;margin:0 auto 20px;line-height:1.6;}
+.stats{display:flex;gap:10px;justify-content:center;margin-bottom:22px;flex-wrap:wrap;}
+.stat{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:12px 16px;min-width:88px;}
+.stat .v{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:var(--g);}
+.stat .l{font-size:11px;color:var(--mu);margin-top:2px;}
+.how-sec{margin-top:26px;width:100%;max-width:380px;}
+.sech{font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-bottom:11px;}
+.hi{display:flex;align-items:flex-start;gap:12px;background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px;margin-bottom:8px;text-align:left;}
+.hi .ico{font-size:20px;flex-shrink:0;margin-top:1px;}
+.hi .ht{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.hi .hd{font-size:12px;color:var(--mu);margin-top:2px;line-height:1.5;}
+.adbox{background:var(--s2);border:1px dashed var(--br);border-radius:12px;padding:13px;cursor:pointer;text-align:center;width:100%;max-width:380px;margin-top:14px;}
+.adbox .al{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mu);margin-bottom:3px;}
+.adbox .ab{font-size:13px;color:var(--tx);padding:3px 0;}
+.adbox .ae{font-size:11px;color:var(--g);margin-top:3px;}
+.testis{margin-top:22px;width:100%;max-width:380px;}
+.tc{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:14px;margin-bottom:8px;text-align:left;}
+.ttop{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.tav{width:34px;height:34px;border-radius:50%;background:rgba(0,200,150,.18);border:1px solid var(--g);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.tnm{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;}
+.tlc{font-size:11px;color:var(--mu);}
+.tst{color:var(--gold);font-size:12px;margin-left:auto;}
+.ttxt{font-size:13px;color:var(--mu);line-height:1.6;}
+.tamt{display:inline-block;margin-top:7px;background:rgba(0,200,150,.1);border:1px solid var(--g);border-radius:8px;padding:3px 10px;font-size:12px;color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;}
+.paylist{margin-top:16px;background:var(--s);border:1px solid var(--br);border-radius:14px;padding:14px;width:100%;max-width:380px;text-align:left;}
+.paylist h4{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px;}
+.prow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--br);}
+.prow:last-child{border-bottom:none;}
+.pav{width:30px;height:30px;border-radius:50%;background:rgba(0,200,150,.18);border:1px solid var(--g);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.pnm{font-size:13px;font-weight:500;}
+.pam{font-size:12px;color:var(--g);}
+.ptm{margin-left:auto;font-size:11px;color:var(--mu);}
+#pg-register,#pg-login{background:#0A0F0D;justify-content:flex-start;align-items:stretch;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.fwrap{width:100%;max-width:400px;margin:0 auto;padding:20px;}
+.bbtn{background:none;border:none;color:var(--mu);font-size:14px;cursor:pointer;padding:4px 0;margin-bottom:16px;display:inline-block;}
+.fcard{background:var(--s);border:1px solid var(--br);border-radius:20px;padding:22px;}
+.fcard h2{font-size:21px;margin-bottom:5px;}
+.fsub{font-size:13px;color:var(--mu);margin-bottom:16px;line-height:1.5;}
+.bbar{background:rgba(0,200,150,.1);border:1px solid var(--g);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--g);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:11px;color:var(--mu);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
+.field input{display:block;width:100%;background:var(--s2);border:2px solid var(--br);border-radius:10px;padding:13px 14px;color:#E8F5F0;font-size:16px;font-family:'Inter',sans-serif;outline:none;-webkit-appearance:none;appearance:none;}
+.field input:focus{border-color:var(--g);}
+.field input::placeholder{color:#7A9E90;}
+.errbar{background:rgba(255,107,107,.12);border:1px solid var(--red);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:12px;display:none;}
+.ffoot{text-align:center;margin-top:14px;font-size:13px;color:var(--mu);}
+.ffoot span{color:var(--g);cursor:pointer;font-weight:500;}
+.fsub-btn{display:block;width:100%;background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;padding:15px;border:none;border-radius:14px;cursor:pointer;margin-top:4px;}
+.fsub-btn:active{opacity:.8;}
+#pg-welcome{background:radial-gradient(ellipse at 50% 30%,rgba(0,200,150,.15) 0%,transparent 60%),#0A0F0D;align-items:center;justify-content:center;padding:32px 20px;text-align:center;overflow-y:auto;}
+.wico{font-size:60px;margin-bottom:12px;animation:pop .5s ease;}
+@keyframes pop{0%{transform:scale(0)}80%{transform:scale(1.1)}100%{transform:scale(1)}}
+.wbonus{font-size:44px;font-weight:700;color:var(--g);font-family:'Space Grotesk',sans-serif;margin:8px 0 3px;}
+.wlbl{font-size:14px;color:var(--mu);margin-bottom:18px;}
+.dayroad{display:flex;gap:10px;justify-content:center;margin-bottom:18px;flex-wrap:wrap;}
+.dchip{background:var(--s2);border:1px solid var(--br);border-radius:12px;padding:11px 14px;min-width:88px;}
+.dchip.on{border-color:var(--g);background:rgba(0,200,150,.08);}
+.dc{font-family:'Space Grotesk',sans-serif;font-size:11px;color:var(--mu);text-transform:uppercase;}
+.dv{font-weight:700;color:var(--g);font-family:'Space Grotesk',sans-serif;font-size:15px;margin-top:3px;}
+.rules{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:14px;max-width:340px;margin:0 auto 18px;text-align:left;}
+.rules h4{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--gold);}
+.ri{font-size:12px;color:var(--mu);padding:5px 0;border-bottom:1px solid var(--br);line-height:1.5;}
+.ri:last-child{border-bottom:none;}
+.ri strong{color:var(--tx);}
+#pg-dash{background:#0A0F0D;}
+.topbar{background:var(--s);border-bottom:1px solid var(--br);padding:13px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--g);}
+.topbal{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;text-align:right;}
+.topbal span{font-size:10px;color:var(--mu);font-weight:400;display:block;}
+.dbody{padding:14px;flex:1;overflow-y:auto;}
+.missed{background:rgba(255,107,107,.1);border:1px solid var(--red);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--red);margin-bottom:11px;display:none;line-height:1.5;}
+.dprog{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px;margin-bottom:11px;}
+.dph{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+.dpt{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.dpb{background:rgba(0,200,150,.1);color:var(--g);border:1px solid var(--g);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;}
+.pbar{background:var(--s2);border-radius:8px;height:8px;overflow:hidden;}
+.pfill{height:100%;background:linear-gradient(90deg,var(--g),#00FFB3);border-radius:8px;transition:width .5s;}
+.dps{font-size:12px;color:var(--mu);margin-top:7px;}
+.balcard{background:linear-gradient(135deg,#0D2B20,#0A1F17);border:1px solid var(--g);border-radius:14px;padding:16px;margin-bottom:11px;position:relative;overflow:hidden;}
+.balcard::before{content:'';position:absolute;top:-28px;right:-28px;width:100px;height:100px;background:radial-gradient(circle,rgba(0,200,150,.2),transparent 70%);border-radius:50%;}
+.bclbl{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.bcamt{font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;color:var(--g);}
+.bcsub{font-size:12px;color:var(--mu);margin-top:3px;}
+.bcrow{display:flex;gap:14px;margin-top:11px;}
+.bcs .bv{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.bcs .bl{font-size:11px;color:var(--mu);}
+.sect{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:9px;}
+.kycbanner{background:linear-gradient(135deg,rgba(255,209,102,.08),rgba(255,209,102,.03));border:1px solid var(--gold);border-radius:14px;padding:14px;margin-bottom:11px;cursor:pointer;}
+.kycbanner:active{opacity:.8;}
+.kyctop{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.kycico{font-size:22px;}
+.kyctitle{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;color:var(--gold);}
+.kycsub{font-size:12px;color:var(--mu);line-height:1.5;}
+.kycbtn{display:inline-block;margin-top:10px;background:var(--gold);color:#000;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;padding:8px 16px;border-radius:10px;border:none;cursor:pointer;}
+.adunit{background:var(--s2);border:1px dashed var(--br);border-radius:12px;padding:13px;margin-bottom:11px;cursor:pointer;text-align:center;}
+.adunit:active{opacity:.8;}
+.adunit .al{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mu);margin-bottom:3px;}
+.adunit .ab{font-size:13px;color:var(--tx);padding:3px 0;}
+.adunit .ae{font-size:11px;color:var(--g);margin-top:3px;}
+.pcard{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;}
+.pcard:active{border-color:var(--g);}
+.pav2{width:44px;height:44px;border-radius:50%;background:var(--s2);border:2px solid var(--br);display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;}
+.pinf{flex:1;}
+.pnm2{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.pfl{font-size:12px;color:var(--mu);}
+.ptop{font-size:11px;color:var(--mu);margin-top:1px;}
+.pdot{width:8px;height:8px;border-radius:50%;background:var(--g);flex-shrink:0;}
+.pe{font-size:13px;color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;}
+.tsk{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px;margin-bottom:8px;cursor:pointer;}
+.tsk:active{border-color:var(--g);}
+.tsk.done{opacity:.5;pointer-events:none;}
+.ttop2{display:flex;align-items:center;gap:12px;}
+.tico{width:40px;height:40px;border-radius:11px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.tinf{flex:1;}
+.tnm2{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.tds{font-size:12px;color:var(--mu);margin-top:2px;}
+.te{font-size:13px;color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;flex-shrink:0;}
+.tlink{margin-top:10px;background:rgba(0,200,150,.06);border:1px solid var(--br);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--mu);display:flex;align-items:center;gap:8px;}
+.botnav{background:var(--s);border-top:1px solid var(--br);display:flex;position:sticky;bottom:0;z-index:50;}
+.nbtn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px;cursor:pointer;color:var(--mu);font-size:10px;gap:3px;border:none;background:none;}
+.nbtn .ni{font-size:19px;}
+.nbtn.on{color:var(--g);}
+#pg-chat{background:#0A0F0D;}
+.chd{background:var(--s);border-bottom:1px solid var(--br);padding:11px 14px;display:flex;align-items:center;gap:11px;position:sticky;top:0;z-index:50;}
+.cbk{background:none;border:none;color:var(--tx);font-size:20px;cursor:pointer;padding:4px;flex-shrink:0;}
+.cav{width:40px;height:40px;border-radius:50%;background:rgba(0,200,150,.18);border:2px solid var(--g);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.cpn{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;}
+.cps{font-size:11px;color:var(--g);}
+.cearn{margin-left:auto;background:rgba(0,200,150,.1);border:1px solid var(--g);border-radius:9px;padding:4px 10px;font-size:12px;color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;white-space:nowrap;}
+.cmsgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.msg{max-width:82%;}
+.msg.them{align-self:flex-start;}
+.msg.me{align-self:flex-end;}
+.mbub{padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.55;}
+.msg.them .mbub{background:var(--s2);border-bottom-left-radius:4px;}
+.msg.me .mbub{background:var(--g);color:#000;font-weight:500;border-bottom-right-radius:4px;}
+.mmeta{font-size:10px;color:var(--mu);margin-top:3px;}
+.msg.me .mmeta{text-align:right;}
+.typewrap{display:flex;gap:4px;align-items:center;padding:11px 13px;background:var(--s2);border-radius:16px;border-bottom-left-radius:4px;width:fit-content;}
+.tdot{width:6px;height:6px;border-radius:50%;background:var(--mu);animation:bnc 1.2s infinite;}
+.tdot:nth-child(2){animation-delay:.25s;}.tdot:nth-child(3){animation-delay:.5s;}
+@keyframes bnc{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
+.cinrow{padding:11px 14px;background:var(--s);border-top:1px solid var(--br);display:flex;gap:9px;align-items:flex-end;position:sticky;bottom:0;}
+.cinp{flex:1;background:var(--s2);border:1px solid var(--br);border-radius:12px;padding:10px 13px;color:var(--tx);font-size:16px;font-family:'Inter',sans-serif;resize:none;outline:none;max-height:100px;}
+.cinp:focus{border-color:var(--g);}
+.sbtn{width:40px;height:40px;background:var(--g);border:none;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+#pg-share{background:#0A0F0D;align-items:center;justify-content:center;padding:28px 20px;text-align:center;}
+.swico{font-size:52px;margin-bottom:12px;}
+.swtit{font-size:20px;font-weight:700;margin-bottom:7px;}
+.swsub{font-size:13px;color:var(--mu);margin-bottom:18px;max-width:300px;line-height:1.6;}
+.swdots{display:flex;justify-content:center;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+.sdot{width:36px;height:36px;border-radius:50%;border:2px solid var(--br);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--mu);font-family:'Space Grotesk',sans-serif;font-weight:700;transition:all .3s;}
+.sdot.filled{background:var(--g);border-color:var(--g);color:#000;}
+.swprev{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px 16px;margin-bottom:16px;width:100%;max-width:340px;}
+.spr{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--br);font-size:13px;}
+.spr:last-child{border-bottom:none;}
+.spl{color:var(--mu);}
+.spv{color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;}
+.wabtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:340px;padding:14px;border:none;border-radius:14px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;margin-bottom:10px;}
+.wabtn.go{background:#25D366;color:#fff;}
+.wabtn.wait{background:var(--s2);color:var(--mu);pointer-events:none;border:1px solid var(--br);}
+.swnote{font-size:12px;color:var(--mu);max-width:300px;line-height:1.5;}
+.swprog{font-size:13px;color:var(--g);font-weight:600;margin-top:10px;font-family:'Space Grotesk',sans-serif;}
+.svmsg{font-size:12px;margin-top:8px;min-height:18px;font-weight:600;}
+.svok{color:var(--g);}
+#pg-claim{background:radial-gradient(ellipse at 50% 20%,rgba(0,200,150,.18) 0%,transparent 60%),#0A0F0D;align-items:center;justify-content:center;padding:36px 20px;text-align:center;}
+.clmico{font-size:68px;margin-bottom:14px;animation:pop .5s ease;}
+.clmamt{font-family:'Space Grotesk',sans-serif;font-size:42px;font-weight:700;color:var(--g);margin:10px 0 4px;}
+.clmlbl{font-size:14px;color:var(--mu);margin-bottom:20px;}
+.clmbox{background:var(--s);border:1px solid var(--g);border-radius:16px;padding:18px;width:100%;max-width:320px;margin-bottom:22px;}
+.clmrow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br);font-size:13px;}
+.clmrow:last-child{border-bottom:none;}
+.clml{color:var(--mu);}
+.clmr{color:var(--g);font-weight:600;font-family:'Space Grotesk',sans-serif;}
+#pg-wd{background:#0A0F0D;justify-content:flex-start;overflow-y:auto;}
+.wdwrap{width:100%;max-width:400px;margin:0 auto;padding:20px;}
+.wdcard{background:var(--s);border:1px solid var(--br);border-radius:20px;padding:22px;}
+.wdbal{background:var(--s2);border-radius:12px;padding:13px;text-align:center;margin-bottom:14px;}
+.wdbv{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:700;color:var(--g);}
+.wdbl{font-size:12px;color:var(--mu);}
+.wdlock{background:rgba(255,107,107,.08);border:1px solid var(--red);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:13px;text-align:center;line-height:1.5;}
+.kycreq{background:rgba(255,209,102,.07);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--gold);margin-bottom:13px;cursor:pointer;text-align:center;}
+.wdf{margin-bottom:12px;}
+.wdf label{display:block;font-size:11px;color:var(--mu);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
+.wdf input,.wdf select{display:block;width:100%;background:var(--s2);border:1px solid var(--br);border-radius:10px;padding:12px 14px;color:var(--tx);font-size:16px;font-family:'Inter',sans-serif;outline:none;-webkit-appearance:none;appearance:none;}
+.wdf input:focus,.wdf select:focus{border-color:var(--g);}
+.wdf input::placeholder{color:var(--mu);}
+.wdf select option{background:var(--s2);}
+#pg-lb,#pg-profile,#pg-terms{background:#0A0F0D;overflow-y:auto;}
+.itopbar{background:var(--s);border-bottom:1px solid var(--br);padding:13px 18px;display:flex;align-items:center;position:sticky;top:0;z-index:50;}
+.ibk{background:none;border:none;color:var(--tx);font-size:19px;cursor:pointer;padding:4px;flex-shrink:0;}
+.ilogo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--g);flex:1;text-align:center;}
+.lbi{display:flex;align-items:center;gap:12px;background:var(--s);border:1px solid var(--br);border-radius:14px;padding:12px 14px;margin-bottom:8px;}
+.lbrank{font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:var(--mu);width:26px;flex-shrink:0;}
+.lbrank.gld{color:var(--gold);}
+.lbav{width:36px;height:36px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.lbnm{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;}
+.lbst{font-size:11px;color:var(--mu);}
+.lbe{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--g);}
+.phd{background:var(--s);border-bottom:1px solid var(--br);padding:20px;text-align:center;}
+.pav3{width:64px;height:64px;border-radius:50%;background:rgba(0,200,150,.18);border:3px solid var(--g);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 10px;}
+.pbody{padding:16px;}
+.psr{display:flex;gap:10px;margin-bottom:13px;}
+.pst{flex:1;background:var(--s);border:1px solid var(--br);border-radius:13px;padding:13px;text-align:center;}
+.psv{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:var(--g);}
+.psl{font-size:11px;color:var(--mu);margin-top:2px;}
+.mrow{display:flex;align-items:center;gap:12px;background:var(--s);border:1px solid var(--br);border-radius:14px;padding:13px 14px;margin-bottom:8px;cursor:pointer;}
+.mrow:active{border-color:var(--g);}
+.mico{font-size:19px;}
+.mlbl{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;flex:1;}
+.marr{color:var(--mu);}
+.tbody{padding:20px;max-width:500px;margin:0 auto;}
+.tbody h3{font-size:15px;margin:16px 0 7px;color:var(--g);}
+.tbody p{font-size:13px;color:var(--mu);line-height:1.7;margin-bottom:8px;}
+.tl2{color:var(--g);font-weight:600;cursor:pointer;}
+#pg-proc,#pg-success{background:#0A0F0D;align-items:center;justify-content:center;padding:40px 20px;text-align:center;}
+.spinner{width:56px;height:56px;border:3px solid var(--s2);border-top-color:var(--g);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.psteps{text-align:left;max-width:280px;margin:18px auto 0;}
+.pstep{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--br);font-size:13px;color:var(--mu);}
+.pstep.done{color:var(--g);}
+.pstep.done::before{content:'✓';color:var(--g);font-weight:700;}
+.pstep:not(.done)::before{content:'○';color:var(--br);}
+#pg-success{background:radial-gradient(ellipse at 50% 30%,rgba(0,200,150,.15) 0%,transparent 60%),#0A0F0D;}
+#ET{position:fixed;top:66px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;padding:9px 20px;border-radius:30px;opacity:0;transition:all .3s;z-index:99999;pointer-events:none;white-space:nowrap;}
+#ET.on{opacity:1;transform:translateX(-50%) translateY(0);}
+#TT{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--s2);border:1px solid var(--br);border-radius:12px;padding:10px 18px;font-size:13px;opacity:0;transition:opacity .3s;z-index:99998;pointer-events:none;max-width:90vw;text-align:center;}
+#TT.on{opacity:1;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--br);border-radius:4px;}
+
+/* ── CHAT NOTIFICATION POPUP ── */
+#chat-notif{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(120px);width:calc(100% - 24px);max-width:420px;background:#0d1f18;border:2px solid var(--g);border-radius:20px;padding:16px 18px;z-index:9000;box-shadow:0 0 0 4px rgba(0,200,150,.15), 0 12px 40px rgba(0,0,0,.5);transition:transform .4s cubic-bezier(.34,1.56,.64,1),opacity .4s;opacity:0;pointer-events:none;}
+#chat-notif.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:all;}
+.cn-top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.cn-av{width:48px;height:48px;border-radius:50%;background:rgba(0,200,150,.2);border:2.5px solid var(--g);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;position:relative;}
+.cn-dot{position:absolute;bottom:1px;right:1px;width:12px;height:12px;background:var(--g);border-radius:50%;border:2px solid #0d1f18;animation:pulse 1.2s infinite;}
+.cn-name{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:#fff;}
+.cn-flag{font-size:12px;color:var(--mu);margin-top:1px;}
+.cn-earn{margin-left:auto;background:rgba(0,200,150,.15);border:1.5px solid var(--g);border-radius:10px;padding:5px 11px;font-size:13px;color:var(--g);font-weight:800;font-family:'Space Grotesk',sans-serif;white-space:nowrap;}
+.cn-preview{font-size:14px;color:#c8e8de;line-height:1.5;margin-bottom:12px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:10px;border-left:3px solid var(--g);}
+.cn-btn{display:block;width:100%;background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:800;padding:13px;border:none;border-radius:12px;cursor:pointer;text-align:center;letter-spacing:.2px;}
+.cn-btn:active{opacity:.85;}
+.cn-dismiss{position:absolute;top:12px;right:14px;background:rgba(255,255,255,.08);border:none;color:var(--mu);font-size:14px;cursor:pointer;padding:4px 8px;border-radius:6px;}
+.cn-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--g);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:5px;}
+.cn-label::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--g);display:inline-block;animation:pulse 1.2s infinite;}
+
+/* ── DAILY SHARE TASK ── */
+.share-task-required{background:linear-gradient(135deg,rgba(0,200,150,.08),rgba(0,200,150,.03));border:1.5px solid var(--g);border-radius:14px;padding:14px;margin-bottom:11px;}
+.share-task-required.locked{border-color:var(--gold);background:rgba(255,209,102,.05);}
+.share-task-required.done{border-color:#1F2E28;opacity:.6;pointer-events:none;}
+.str-top{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+.str-ico{width:40px;height:40px;border-radius:11px;background:rgba(0,200,150,.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.str-title{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;}
+.str-sub{font-size:12px;color:var(--mu);margin-top:2px;}
+.str-earn{font-size:13px;font-weight:700;color:var(--g);font-family:'Space Grotesk',sans-serif;margin-left:auto;}
+.str-btn{display:block;width:100%;background:#25D366;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;padding:10px;border:none;border-radius:10px;cursor:pointer;margin-top:6px;}
+.str-btn:active{opacity:.8;}
+.str-btn:disabled{background:var(--br);color:var(--mu);cursor:not-allowed;}
+.str-lock{font-size:11px;color:var(--gold);margin-top:5px;text-align:center;}
+.nb-badge{position:absolute;top:4px;right:10px;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;}
+.nbtn{position:relative;}
+.adm-tab{flex-shrink:0;background:none;border:none;color:#7A9E90;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+.adm-tab.active{color:#00C896;border-bottom-color:#00C896;}
+.adm-tab:hover{color:#E8F5F0;}
+.adm-filter{background:#1A2520;border:1.5px solid #1F2E28;color:#7A9E90;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s;}
+.adm-filter.active{background:rgba(0,200,150,.12);border-color:rgba(0,200,150,.4);color:#00C896;}
+.adm-card{background:#121A16;border:1px solid #1F2E28;border-radius:14px;padding:14px;margin-bottom:10px;}
+.adm-card-name{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;color:#E8F5F0;margin-bottom:2px;}
+.adm-card-sub{font-size:12px;color:#7A9E90;margin-bottom:10px;}
+.adm-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;}
+.adm-card-cell{font-size:12px;color:#7A9E90;}<br>.adm-card-cell strong{color:#E8F5F0;display:block;font-size:13px;margin-top:1px;}
+.adm-amount{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:#00C896;margin-bottom:10px;}
+.adm-btn-approve{background:#00C896;color:#000;border:none;border-radius:9px;padding:9px 16px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-right:8px;}
+.adm-btn-reject{background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.3);color:#FF6B6B;border-radius:9px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;}
+.adm-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+.adm-badge-pending{background:rgba(255,209,102,.12);color:#FFD166;border:1px solid rgba(255,209,102,.3);}
+.adm-badge-approved{background:rgba(0,200,150,.12);color:#00C896;border:1px solid rgba(0,200,150,.3);}
+.adm-badge-rejected{background:rgba(255,107,107,.12);color:#FF6B6B;border:1px solid rgba(255,107,107,.3);}
+.adm-loading{text-align:center;padding:32px;color:#7A9E90;font-size:13px;}
+.adm-empty{text-align:center;padding:32px;color:#7A9E90;font-size:13px;}
+/* ── PHONE MOCKUP ── */
+.phone-mock{background:var(--s);border:2px solid var(--br);border-radius:22px;padding:14px;margin:18px auto 0;max-width:310px;width:100%;box-shadow:0 0 0 1px rgba(0,200,150,.1),0 20px 60px rgba(0,0,0,.4);}
+.pm-bar{display:flex;align-items:center;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--br);margin-bottom:10px;}
+.pm-dot{width:8px;height:8px;border-radius:50%;background:var(--g);animation:pulse 1.4s infinite;flex-shrink:0;}
+.pm-msgs{display:flex;flex-direction:column;gap:7px;}
+.pm-them{background:var(--s2);border-radius:0 12px 12px 12px;padding:9px 12px;font-size:13px;color:var(--tx);max-width:85%;line-height:1.4;}
+.pm-me{background:linear-gradient(135deg,#00C896,#00a87d);border-radius:12px 0 12px 12px;padding:9px 12px;font-size:13px;color:#000;max-width:85%;align-self:flex-end;font-weight:500;line-height:1.4;}
+.pm-earn{background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:10px;padding:7px 12px;font-size:12px;color:var(--g);font-weight:700;font-family:'Space Grotesk',sans-serif;text-align:center;animation:pop .4s ease;}
+
+/* ── BIG STATS ── */
+.big-stats{display:flex;align-items:center;justify-content:center;background:var(--s);border:1px solid var(--br);border-radius:16px;padding:16px 10px;margin:18px 0 0;width:100%;max-width:380px;gap:0;}
+.bs-card{flex:1;text-align:center;}
+.bs-val{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:var(--g);}
+.bs-lbl{font-size:11px;color:var(--mu);margin-top:3px;}
+.bs-div{width:1px;height:36px;background:var(--br);}
+
+/* ── TRUST BADGES ── */
+.trust-badge{background:var(--s2);border:1px solid var(--br);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--mu);font-weight:600;}
+
+/* ── TESTIMONIAL UPGRADE ── */
+.tc{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:14px;margin-bottom:8px;text-align:left;box-shadow:0 2px 12px rgba(0,200,150,.06);}
+.tverified{display:inline-flex;align-items:center;gap:4px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--g);font-weight:700;margin-left:auto;}
+
+/* ── EXTRA AD SPOTS ── */
+.adspot-inline{background:linear-gradient(135deg,var(--s2),var(--s));border:1px dashed rgba(0,200,150,.3);border-radius:12px;padding:13px 14px;margin:11px 0;cursor:pointer;display:flex;align-items:center;gap:12px;text-decoration:none;}
+.adspot-inline:active{opacity:.8;}
+.adspot-ico{font-size:24px;flex-shrink:0;}
+.adspot-body{flex:1;}
+.adspot-title{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:2px;}
+.adspot-sub{font-size:11px;color:var(--mu);}
+.adspot-arrow{font-size:16px;color:var(--g);font-weight:700;flex-shrink:0;}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--br);cursor:pointer;transition:all .3s;}
+.tdot.active{background:var(--g);width:20px;border-radius:4px;}
+
+/* ── MATCH REVEAL ── */
+.match-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);}
+.match-card{position:relative;background:var(--s);border:1px solid var(--br);border-radius:24px;padding:28px 20px 22px;text-align:center;width:calc(100% - 40px);max-width:360px;margin:auto;animation:matchPop .5s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes matchPop{from{opacity:0;transform:scale(.85) translateY(30px)}to{opacity:1;transform:scale(1) translateY(0)}}
+#pg-match{align-items:center;justify-content:center;padding:20px;}
+.match-label{font-size:12px;color:var(--mu);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;}
+.match-av-wrap{position:relative;width:90px;height:90px;margin:0 auto 14px;}
+.match-av{width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--g);box-shadow:0 0 0 6px rgba(0,200,150,.15);}
+.match-online-dot{position:absolute;bottom:4px;right:4px;width:16px;height:16px;background:var(--g);border-radius:50%;border:3px solid var(--s);animation:pulse 1.3s infinite;}
+.match-name{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;margin-bottom:4px;}
+.match-loc{font-size:14px;color:var(--mu);margin-bottom:8px;}
+.match-interests{display:inline-flex;gap:6px;font-size:12px;color:var(--g);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:20px;padding:4px 12px;margin-bottom:14px;}
+.match-msg{background:var(--s2);border-radius:14px;border-bottom-left-radius:4px;padding:12px 14px;font-size:14px;color:var(--tx);font-style:italic;line-height:1.5;margin-bottom:14px;text-align:left;}
+.match-earn{font-size:13px;color:var(--mu);margin-bottom:16px;}
+.match-earn strong{color:var(--g);}
+.match-btn{display:block;width:100%;background:var(--g);color:#000;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:10px;transition:all .2s;}
+.match-btn:active{transform:scale(.98);}
+.match-skip{background:none;border:none;color:var(--mu);font-size:13px;cursor:pointer;padding:6px;}
+
+/* ── PREMIUM CHAT HEADER ── */
+.chd-premium{background:var(--s);border-bottom:1px solid var(--br);padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;flex-shrink:0;}
+.chd-av-wrap{position:relative;flex-shrink:0;}
+.chd-av-img{width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid var(--g);}
+.chd-online{position:absolute;bottom:1px;right:1px;width:11px;height:11px;background:var(--g);border-radius:50%;border:2px solid var(--s);}
+.chd-info{flex:1;}
+
+/* ── PREMIUM MESSAGES ── */
+.cmsgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;}
+.cmsgs::-webkit-scrollbar{width:3px;}
+.cmsgs::-webkit-scrollbar-thumb{background:var(--br);border-radius:3px;}
+
+.msg{display:flex;gap:8px;max-width:85%;animation:msgPop .25s ease both;}
+@keyframes msgPop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.them{align-self:flex-start;}
+.msg.me{align-self:flex-end;flex-direction:row-reverse;}
+
+.msg-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;align-self:flex-end;border:1.5px solid var(--br);}
+
+.msg-body{display:flex;flex-direction:column;gap:2px;}
+.bubble{padding:10px 13px;border-radius:18px;font-size:14px;line-height:1.5;position:relative;}
+.them .bubble{background:var(--s2);border:1px solid var(--br);border-bottom-left-radius:4px;color:var(--tx);}
+.me .bubble{background:linear-gradient(135deg,#1a5c38,#0d7a47);border-bottom-right-radius:4px;color:#fff;}
+
+/* Image message */
+.msg-img{width:180px;border-radius:14px;border-bottom-left-radius:4px;object-fit:cover;cursor:pointer;border:1px solid var(--br);}
+.me .msg-img{border-bottom-right-radius:4px;border-bottom-left-radius:14px;}
+
+/* Voice note */
+.voice-note{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--br);border-radius:18px;border-bottom-left-radius:4px;min-width:160px;cursor:pointer;}
+.vn-play{width:30px;height:30px;border-radius:50%;background:var(--g);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.vn-wave{flex:1;height:24px;display:flex;align-items:center;gap:2px;}
+.vn-bar{width:3px;background:var(--mu);border-radius:2px;animation:vwave 1s infinite alternate;}
+.vn-dur{font-size:11px;color:var(--mu);}
+@keyframes vwave{0%{height:4px}100%{height:16px}}
+
+/* Reaction bubble */
+.msg-reaction{font-size:16px;position:absolute;bottom:-8px;right:6px;background:var(--s);border:1px solid var(--br);border-radius:10px;padding:1px 5px;animation:reactionPop .3s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes reactionPop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+
+/* Read receipts */
+.msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:3px;margin-top:2px;}
+.msg-time-txt{font-size:10px;color:var(--mu);}
+.read-tick{font-size:11px;color:var(--g);}
+
+/* Typing indicator */
+.typewrap{background:var(--s2);border:1px solid var(--br);border-radius:18px;border-bottom-left-radius:4px;padding:12px 16px;display:flex;gap:5px;align-items:center;}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--mu);animation:tdot 1.2s infinite;}
+.tdot:nth-child(2){animation-delay:.2s;}
+.tdot:nth-child(3){animation-delay:.4s;}
+@keyframes tdot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+/* Quick replies — staggered fade in */
+.chat-qr{display:flex;gap:7px;padding:8px 12px;overflow-x:auto;scrollbar-width:none;flex-shrink:0;}
+.chat-qr::-webkit-scrollbar{display:none;}
+.qr-chip{background:var(--s2);border:1.5px solid var(--br);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;flex-shrink:0;color:var(--tx);transition:all .22s;opacity:0;transform:translateY(8px);animation:chipIn .35s ease forwards;}
+@keyframes chipIn{to{opacity:1;transform:translateY(0)}}
+.qr-chip:active{border-color:var(--g);background:rgba(0,200,150,.1);}
+
+/* Partner card in dashboard — premium */
+.pcard-premium{background:var(--s);border:1px solid var(--br);border-radius:16px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.pcard-premium:active{transform:scale(.99);}
+.pc-av-wrap{position:relative;flex-shrink:0;}
+.pc-av-img{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--br);}
+.pc-online-ring{position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--g);animation:onlineRing 2s infinite;}
+@keyframes onlineRing{0%,100%{opacity:1}50%{opacity:.4}}
+.pc-dot{position:absolute;bottom:2px;right:2px;width:11px;height:11px;background:var(--g);border-radius:50%;border:2px solid var(--s);}
+.pc-info{flex:1;min-width:0;}
+.pc-name{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;margin-bottom:2px;}
+.pc-loc{font-size:12px;color:var(--mu);margin-bottom:4px;}
+.pc-preview{font-size:12px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pc-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;}
+.pc-earn{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;color:var(--g);}
+.pc-time{font-size:10px;color:var(--mu);}
+.pc-unread{width:18px;height:18px;background:var(--g);border-radius:50%;font-size:10px;font-weight:700;color:#000;display:flex;align-items:center;justify-content:center;}
+</style>
+</head>
+<body>
+
+<div id="ET"></div>
+<div id="TT"></div>
+
+<!-- CHAT NOTIFICATION POPUP -->
+<div id="chat-notif">
+  <button class="cn-dismiss" id="cn-dismiss-btn">✕</button>
+  <div class="cn-label">💬 New message waiting</div>
+  <div class="cn-top">
+    <div class="cn-av"><span id="cn-av">👩</span><div class="cn-dot"></div></div>
+    <div><div class="cn-name" id="cn-name">Sarah M.</div><div class="cn-flag" id="cn-flag">🇬🇧 London, UK · Online now</div></div>
+    <div class="cn-earn">+₦6,000</div>
+  </div>
+  <div class="cn-preview" id="cn-preview">"Hey! So glad to finally connect with someone from Nigeria 👋"</div>
+  <button class="cn-btn" id="cn-open-btn">💬 Reply & Earn ₦6,000 →</button>
+</div>
+
+<!-- DAY MODAL -->
+<div id="day-modal">
+  <div class="mbox">
+    <div style="font-size:46px;margin-bottom:10px;" id="dm-ico">🎉</div>
+    <h3 id="dm-title">Welcome to Day 1!</h3>
+    <p id="dm-body">Your bonus is ready. Complete your chats and tasks today.</p>
+    <div class="mearns" id="dm-target">Target: ₦15,000</div>
+    <div class="mad" id="modal-ad">
+      <div class="al">Sponsored</div>
+      <div class="ab">🎯 Exclusive opportunity for Chat-to-Earn members</div>
+      <div class="ae">+₦300 bonus credited instantly</div>
+    </div>
+    <button class="mbtn" id="modal-close-btn">Start Earning Now!</button>
+  </div>
+</div>
+
+<!-- LANDING -->
+<div class="page on" id="pg-landing">
+
+  <!-- ANIMATED BACKGROUND PARTICLES -->
+  <canvas id="land-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.4;"></canvas>
+
+  <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;padding:0 20px 40px;text-align:center;">
+
+  <!-- LIVE BADGE — tap 5x for admin -->
+  <div id="hero-logo" style="cursor:default;user-select:none;display:inline-block;margin-top:28px;padding:10px 0;">
+    <div class="live"><span class="ldot"></span> <span id="live-count">4,291</span> Nigerians earning right now</div>
+  </div>
+
+  <!-- HERO SECTION -->
+  <div style="margin-top:16px;max-width:380px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:var(--g);text-transform:uppercase;margin-bottom:12px;">💬 Chat · Earn · Withdraw</div>
+    <h1 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(28px,8vw,38px);font-weight:700;line-height:1.1;margin-bottom:14px;">
+      Chat with<br/><span style="background:linear-gradient(135deg,#00C896,#00a87d);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Foreigners</span><br/>Get Paid <span style="background:linear-gradient(135deg,#FFD166,#f4a500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Cash</span>
+    </h1>
+    <p style="font-size:14px;color:var(--mu);line-height:1.7;margin-bottom:20px;">Real verified chats with people from UK, USA & Canada. Earn <strong style="color:var(--g);">₦2,000</strong> per reply. Paid to your Nigerian bank in 3 days.</p>
+  </div>
+
+  <!-- FLAGS SCROLL -->
+  <div class="flags" style="margin-bottom:18px;">
+    <span class="flag">🇺🇸 Americans</span><span class="flag">🇬🇧 British</span>
+    <span class="flag">🇨🇦 Canadians</span><span class="flag">🇩🇪 Germans</span>
+    <span class="flag">🇦🇺 Australians</span><span class="flag">🇫🇷 French</span>
+  </div>
+
+  <!-- BIG STATS -->
+  <div class="big-stats">
+    <div class="bs-card">
+      <div class="bs-val">₦2,000</div>
+      <div class="bs-lbl">Per Message</div>
+    </div>
+    <div class="bs-div"></div>
+    <div class="bs-card">
+      <div class="bs-val">3</div>
+      <div class="bs-lbl">Days to Withdraw</div>
+    </div>
+    <div class="bs-div"></div>
+    <div class="bs-card">
+      <div class="bs-val">₦50K</div>
+      <div class="bs-lbl">Min. Payout</div>
+    </div>
+  </div>
+
+  <!-- CTA BUTTONS -->
+  <button class="gbtn" id="land-signup-btn" style="margin-top:18px;font-size:16px;padding:16px;">🚀 Start Earning Free — Get ₦2,000</button>
+  <button class="obtn" id="land-login-btn" style="margin-top:10px;">Already have an account? Login →</button>
+
+  <!-- TRUST BADGES -->
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:16px 0;">
+    <div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--mu);">✅ No upfront payment</div>
+    <div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--mu);">🏦 Bank transfer</div>
+    <div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--mu);">⚡ Instant signup</div>
+  </div>
+
+  <!-- AD SPOT 1 -->
+  <div class="adbox" id="land-ad1" style="margin-bottom:4px;">
+    <div class="al">Sponsored</div>
+    <div class="ab">🎯 Top earning opportunity for Nigerians — tap to explore</div>
+    <div class="ae">Tap to claim your bonus</div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-sec">
+    <h3 class="sech">How it works</h3>
+    <div class="hi"><div class="ico">👤</div><div><div class="ht">Create free account</div><div class="hd">Sign up in seconds. Get ₦2,000 startup bonus immediately.</div></div></div>
+    <div class="hi"><div class="ico">💬</div><div><div class="ht">Chat with foreigners daily</div><div class="hd">Real people from UK, US, Canada, Germany. Earn ₦2,000 per reply.</div></div></div>
+    <div class="hi"><div class="ico">📲</div><div><div class="ht">Share to unlock earnings</div><div class="hd">Share to WhatsApp after each session to confirm your bonus.</div></div></div>
+    <div class="hi"><div class="ico">✅</div><div><div class="ht">Complete KYC verification</div><div class="hd">Required before withdrawal. Takes 2 minutes.</div></div></div>
+    <div class="hi"><div class="ico">⚠️</div><div><div class="ht">Log in every single day</div><div class="hd">Miss one day and your balance resets to zero. No exceptions.</div></div></div>
+    <div class="hi"><div class="ico">💸</div><div><div class="ht">Withdraw on Day 3</div><div class="hd">Hit ₦50,000 and cash out to Opay, Palmpay or any Nigerian bank.</div></div></div>
+  </div>
+
+  <!-- AD SPOT 2 -->
+  <div class="adbox" id="land-ad2" style="margin-top:8px;">
+    <div class="al">Sponsored</div>
+    <div class="ab">💰 Smart Nigerians earning extra from their phones — find out how</div>
+    <div class="ae">Tap to explore</div>
+  </div>
+
+  <!-- TESTIMONIALS CAROUSEL -->
+  <div class="testis" style="margin-top:18px;width:100%;max-width:380px;">
+    <h3 class="sech">What members are saying</h3>
+    <div style="position:relative;overflow:hidden;border-radius:14px;">
+      <div id="testi-track" style="display:flex;transition:transform .5s ease;will-change:transform;"></div>
+    </div>
+    <div id="testi-dots" style="display:flex;justify-content:center;gap:6px;margin-top:10px;"></div>
+  </div>
+
+  <!-- AD SPOT 3 -->
+  <div class="adbox" id="land-ad3" style="margin-top:8px;">
+    <div class="al">Sponsored</div>
+    <div class="ab">🚀 Join thousands of Nigerians making money daily online</div>
+    <div class="ae">Tap to learn more</div>
+  </div>
+
+  <!-- LIVE PAYOUTS -->
+  <div class="paylist" style="margin-top:14px;"><h4>💸 Recent Payouts</h4><div id="pay-list"></div></div>
+
+  <!-- FINAL CTA -->
+  <div style="padding:20px 0 10px;width:100%;">
+    <button class="gbtn" id="land-signup-btn2">🚀 Join Free & Get ₦2,000 Now</button>
+  </div>
+
+  <!-- HIDDEN ADMIN ACCESS -->
+  <div style="padding:0 0 40px;text-align:center;">
+    <span id="admin-secret-btn" style="font-size:11px;color:#1A2520;cursor:pointer;user-select:none;">earn-chat.com</span>
+  </div>
+
+  </div><!-- /z-index wrapper -->
+</div>
+
+<!-- REGISTER -->
+<div class="page" id="pg-register">
+  <div class="fwrap">
+    <button class="bbtn" id="reg-back-btn">← Back</button>
+    <div class="fcard">
+      <h2>Sign Up</h2>
+      <p class="fsub">Create your free account and get ₦2,000 instantly</p>
+      <div class="bbar">🎁 ₦2,000 signup bonus on approval</div>
+      <div class="errbar" id="reg-err"></div>
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="reg-name" placeholder="e.g. Chioma Adeyemi" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Email Address</label>
+        <input type="email" id="reg-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="reg-pass" placeholder="Minimum 6 characters">
+      </div>
+      <button class="fsub-btn" id="reg-submit">Create Account — Get ₦2,000</button>
+      <div class="ffoot">Already have an account? <span id="go-login">Login here</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="page" id="pg-login">
+  <div class="fwrap">
+    <button class="bbtn" id="login-back-btn">← Back</button>
+    <div class="fcard">
+      <h2>Welcome Back</h2>
+      <p class="fsub">Login daily to protect your earnings. Missing one day resets your balance.</p>
+      <div class="errbar" id="login-err"></div>
+      <div class="field">
+        <label>Email Address</label>
+        <input type="email" id="login-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="Your password" autocomplete="current-password">
+      </div>
+      <button class="fsub-btn" id="login-submit">Login to Dashboard</button>
+      <div class="ffoot">New here? <span id="go-register">Create free account</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- WELCOME -->
+<div class="page" id="pg-welcome">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;text-align:center;overflow-y:auto;">
+    <div class="wico">🎉</div>
+    <h2 style="font-size:21px;margin-bottom:5px;">Welcome, <span id="wname" style="color:var(--g)">Friend</span>!</h2>
+    <p style="font-size:13px;color:var(--mu);margin-bottom:12px;">Your ₦2,000 signup bonus has been credited</p>
+    <div class="wbonus">₦2,000</div>
+    <div class="wlbl">Startup Bonus</div>
+    <div class="dayroad">
+      <div class="dchip on"><div class="dc">Day 1</div><div class="dv">₦15,000</div></div>
+      <div class="dchip"><div class="dc">Day 2</div><div class="dv">₦17,000</div></div>
+      <div class="dchip"><div class="dc">Day 3</div><div class="dv">Withdraw!</div></div>
+    </div>
+    <div class="rules">
+      <h4>⚠️ Important Rules</h4>
+      <div class="ri"><strong>Log in every day.</strong> Missing one day resets your full balance to zero.</div>
+      <div class="ri"><strong>Complete at least 2 chats per day</strong> to keep your streak active.</div>
+      <div class="ri"><strong>Share after every chat</strong> to unlock your session bonus.</div>
+      <div class="ri"><strong>Complete KYC</strong> before your withdrawal can be processed.</div>
+      <div class="ri"><strong>One account per person.</strong> Duplicates are banned permanently.</div>
+    </div>
+    <button class="gbtn" id="start-btn" style="max-width:340px;">Start Chatting Now</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="page" id="pg-dash">
+  <div class="topbar">
+    <div class="logo">Chat-to-Earn</div>
+    <div class="topbal" id="top-bal">₦2,000 <span>Your balance</span></div>
+  </div>
+  <div class="dbody">
+    <div class="missed" id="missed-bar">⚠️ You missed yesterday! Your balance has been reset.</div>
+    <div class="dprog">
+      <div class="dph"><div class="dpt" id="dp-title">Day 1 of 3</div><div class="dpb" id="dp-badge">DAY 1</div></div>
+      <div class="pbar"><div class="pfill" id="pfill" style="width:4%"></div></div>
+      <div class="dps" id="dp-sub">Complete chats and tasks to hit your ₦15,000 Day 1 target</div>
+    </div>
+    <div class="balcard">
+      <div class="bclbl">Total Balance</div>
+      <div class="bcamt" id="bal-amt">₦2,000</div>
+      <div class="bcsub" id="bal-sub">Day 1 target: ₦15,000 · Withdraw on Day 3</div>
+      <div class="bcrow">
+        <div class="bcs"><div class="bv" id="st-chats">0</div><div class="bl">Chats</div></div>
+        <div class="bcs"><div class="bv" id="st-shares">0</div><div class="bl">Shares</div></div>
+        <div class="bcs"><div class="bv" id="st-day">1</div><div class="bl">Day</div></div>
+      </div>
+    </div>
+    <div class="kycbanner" id="kyc-banner">
+      <div class="kyctop"><div class="kycico">🪪</div><div class="kyctitle">Complete Your KYC — Required for Withdrawal</div></div>
+      <div class="kycsub">Identity verification is pending. You cannot withdraw until KYC is approved. Takes only 2 minutes.</div>
+      <button class="kycbtn">Complete KYC Now →</button>
+    </div>
+    <div class="adunit" id="dash-ad1">
+      <div class="al">Sponsored</div>
+      <div class="ab">📱 Exclusive deals for Chat-to-Earn members — tap to explore</div>
+      <div class="ae">+₦300 bonus for viewing</div>
+    </div>
+    <div class="sect">💬 Chat Partners Online Now</div>
+    <div id="partners-list"></div>
+    <div class="sect" style="margin-top:4px;">⚡ Today's Tasks</div>
+    <div class="tsk" id="tsk-checkin">
+      <div class="ttop2"><div class="tico">📅</div><div class="tinf"><div class="tnm2">Daily Check-in</div><div class="tds">Tap to check in and protect your earnings streak</div></div><div class="te">+₦1,000</div></div>
+    </div>
+    <div class="tsk" id="tsk-video">
+      <div class="ttop2"><div class="tico">📺</div><div class="tinf"><div class="tnm2">Watch Today's Video</div><div class="tds">Watch a short sponsored video from our partners</div></div><div class="te">+₦1,500</div></div>
+      <div class="tlink" id="video-link"><span>▶</span><span>Tap here to watch video and earn</span></div>
+    </div>
+    <div class="tsk" id="tsk-offer">
+      <div class="ttop2"><div class="tico">🎁</div><div class="tinf"><div class="tnm2">Complete Today's Offer</div><div class="tds">Complete a special offer from our sponsors</div></div><div class="te">+₦2,000</div></div>
+      <div class="tlink" id="offer-link"><span>🎯</span><span>Tap here to view today's offer and claim reward</span></div>
+    </div>
+
+    <!-- DAILY SHARE TASK — compulsory -->
+    <div class="share-task-required" id="tsk-daily-share">
+      <div class="str-top">
+        <div class="str-ico">📲</div>
+        <div><div class="str-title">Daily WhatsApp Share <span style="font-size:10px;background:var(--red);color:#fff;border-radius:5px;padding:2px 6px;vertical-align:middle;margin-left:4px;">REQUIRED</span></div>
+        <div class="str-sub">Share to 3 WhatsApp contacts to unlock your earnings today</div></div>
+        <div class="str-earn">+₦1,500</div>
+      </div>
+      <div style="background:var(--s2);border-radius:8px;height:6px;overflow:hidden;margin-bottom:6px;">
+        <div id="daily-share-bar" style="height:100%;background:linear-gradient(90deg,#25D366,#00C896);border-radius:8px;width:0%;transition:width .4s;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--mu);margin-bottom:7px;" id="daily-share-prog">0 of 3 shares done — required to unlock today's earnings</div>
+      <button class="str-btn" id="tsk-daily-share-btn">💬 Share on WhatsApp</button>
+    </div>
+    <div id="unlock-banner" style="display:none;background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(0,200,150,.05));border:1px solid var(--g);border-radius:14px;padding:14px;margin-bottom:11px;cursor:pointer;" onclick="pg('pg-wd')">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:22px;">🔓</span>
+        <span style="font-family:Space Grotesk,sans-serif;font-size:14px;font-weight:700;color:var(--g);">Unlock Unlimited Earnings!</span>
+      </div>
+      <div style="font-size:12px;color:var(--mu);line-height:1.5;">You have reached today's earning limit. Complete your first withdrawal to unlock unlimited daily earnings — chat as much as you want!</div>
+      <button style="display:inline-block;margin-top:10px;background:var(--g);color:#000;font-family:Space Grotesk,sans-serif;font-size:13px;font-weight:700;padding:8px 16px;border-radius:10px;border:none;cursor:pointer;">Withdraw Now to Unlock →</button>
+    </div>
+    <div class="adunit" id="dash-ad2" style="margin-top:4px;">
+      <div class="al">Sponsored</div>
+      <div class="ab">🔥 Hot earning opportunities — only for verified Chat-to-Earn members</div>
+      <div class="ae">+₦300 bonus for viewing</div>
+    </div>
+  </div>
+  <div class="botnav">
+    <button class="nbtn on" id="nb-home"><div class="ni">🏠</div>Home</button>
+    <button class="nbtn" id="nb-chat"><div class="ni">💬</div>Chat<span class="nb-badge" id="chat-nav-badge" style="display:none">1</span></button>
+    <button class="nbtn" id="nb-lb"><div class="ni">🏆</div>Top</button>
+    <button class="nbtn" id="nb-wd"><div class="ni">💸</div>Withdraw</button>
+    <button class="nbtn" id="nb-prof"><div class="ni">👤</div>Profile</button>
+  </div>
+</div>
+
+<!-- MATCH REVEAL CARD -->
+<div class="page" id="pg-match">
+  <div class="match-bg"></div>
+  <div class="match-card" id="match-card">
+    <div class="match-label">💬 New Chat Request</div>
+    <div class="match-av-wrap">
+      <img class="match-av" id="match-av-img" src="" alt=""/>
+      <div class="match-online-dot"></div>
+    </div>
+    <div class="match-name" id="match-name">Sarah M.</div>
+    <div class="match-loc" id="match-loc">🇬🇧 London, UK</div>
+    <div class="match-interests" id="match-interests">Travel · Business</div>
+    <div class="match-msg" id="match-msg">"Hey! So glad to finally connect with someone from Nigeria 👋"</div>
+    <div class="match-earn">You earn <strong>₦2,000</strong> for this chat</div>
+    <button class="match-btn" id="match-accept-btn">💬 Accept & Start Chat →</button>
+    <button class="match-skip" id="match-skip-btn">Skip →</button>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div class="page" id="pg-chat">
+  <!-- Premium chat header -->
+  <div class="chd-premium">
+    <button class="cbk" id="chat-back-btn">←</button>
+    <div class="chd-av-wrap">
+      <img class="chd-av-img" id="c-av-img" src="" alt=""/>
+      <div class="chd-online"></div>
+    </div>
+    <div class="chd-info">
+      <div class="cpn" id="c-name">Partner</div>
+      <div class="cps" id="c-stat">Online now</div>
+    </div>
+    <div class="cearn" id="c-earn">₦0 earned</div>
+  </div>
+  <div class="cmsgs" id="chat-msgs"></div>
+  <!-- Quick reply chips -->
+  <div class="chat-qr" id="chat-qr"></div>
+  <div class="cinrow">
+    <textarea class="cinp" id="chat-inp" placeholder="Type your message..." rows="1"></textarea>
+    <button class="sbtn" id="send-btn">➤</button>
+  </div>
+</div>
+
+<!-- SHARE WALL -->
+<div class="page" id="pg-share">
+  <div class="swico">📲</div>
+  <h2 class="swtit">Unlock Your Session Bonus!</h2>
+  <p class="swsub">Share Chat-to-Earn on WhatsApp. Every share is verified. Each confirmed share earns you ₦500 extra.</p>
+  <div class="swdots" id="sw-dots"></div>
+  <div class="swprev">
+    <div class="spr"><span class="spl">Chat session earned</span><span class="spv" id="sw-sess">₦6,000</span></div>
+    <div class="spr"><span class="spl">Bonus per confirmed share</span><span class="spv">+₦500</span></div>
+    <div class="spr"><span class="spl">Shares confirmed</span><span class="spv" id="sw-done-txt">0 / 5</span></div>
+    <div class="spr"><span class="spl">Total to unlock</span><span class="spv" id="sw-total">₦6,000</span></div>
+  </div>
+  <button class="wabtn go" id="wa-btn">💬 <span id="wa-btn-txt">Tap to Share on WhatsApp</span></button>
+  <p class="swnote">Each share must go to a different contact or group. System verifies each share individually.</p>
+  <div class="svmsg" id="sv-msg"></div>
+  <p class="swprog" id="sw-prog">0 of 5 shares done</p>
+  <!-- AD SPOT — Share page -->
+  <a href="javascript:void(0)" onclick="openLink('share_ad1')" class="adspot-inline" style="margin:14px 16px 0;">
+    <div class="adspot-ico">🎁</div>
+    <div class="adspot-body"><div class="adspot-title">Claim Extra Bonus While You Wait</div><div class="adspot-sub">Sponsored — tap to earn more</div></div>
+    <div class="adspot-arrow">→</div>
+  </a>
+</div>
+
+<!-- CLAIM -->
+<div class="page" id="pg-claim">
+  <div class="clmico">🏆</div>
+  <h2 style="font-size:22px;margin-bottom:4px;">Reward Unlocked!</h2>
+  <p style="font-size:13px;color:var(--mu);margin-bottom:10px;">Your session bonus has been confirmed and credited</p>
+  <div class="clmamt" id="clm-amt">₦8,500</div>
+  <div class="clmlbl">Credited to your balance</div>
+  <div class="clmbox">
+    <div class="clmrow"><span class="clml">Chat session</span><span class="clmr" id="clm-chat">₦6,000</span></div>
+    <div class="clmrow"><span class="clml">Share bonuses</span><span class="clmr" id="clm-shares">₦2,500</span></div>
+    <div class="clmrow"><span class="clml">New balance</span><span class="clmr" id="clm-bal">₦8,500</span></div>
+  </div>
+  <button class="gbtn" id="claim-continue-btn" style="max-width:320px;">Continue to Dashboard</button>
+  <!-- AD SPOT — Claim page (user is happy, high click rate) -->
+  <a href="javascript:void(0)" onclick="openLink('claim_ad1')" class="adspot-inline" style="margin:14px 16px 0;max-width:320px;">
+    <div class="adspot-ico">💎</div>
+    <div class="adspot-body"><div class="adspot-title">Double Your Earnings — Exclusive Offer</div><div class="adspot-sub">Only available to active earners</div></div>
+    <div class="adspot-arrow">→</div>
+  </a>
+  <a href="javascript:void(0)" onclick="openLink('claim_ad2')" class="adspot-inline" style="margin:8px 16px 20px;max-width:320px;">
+    <div class="adspot-ico">🚀</div>
+    <div class="adspot-body"><div class="adspot-title">Boost Your Balance — Tap to See How</div><div class="adspot-sub">Sponsored opportunity for members</div></div>
+    <div class="adspot-arrow">→</div>
+  </a>
+</div>
+
+<!-- LEADERBOARD -->
+<div class="page" id="pg-lb">
+  <div class="itopbar">
+    <button class="ibk" id="lb-back-btn">←</button>
+    <div class="ilogo">Top Earners</div>
+    <div style="width:32px;"></div>
+  </div>
+  <div style="padding:16px;">
+    <div style="background:rgba(0,200,150,.08);border:1px solid var(--g);border-radius:14px;padding:13px;text-align:center;margin-bottom:13px;">
+      <div style="font-size:12px;color:var(--mu);">Your current rank</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:var(--g);" id="my-rank">#312</div>
+    </div>
+    <div id="lb-list"></div>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div class="page" id="pg-profile">
+  <div class="itopbar">
+    <button class="ibk" id="prof-back-btn">←</button>
+    <div class="ilogo">My Profile</div>
+    <div style="width:32px;"></div>
+  </div>
+  <div class="phd">
+    <div class="pav3">👤</div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;" id="prof-name">User</div>
+    <div style="font-size:13px;color:var(--mu);margin-top:3px;" id="prof-email">user@chat-to-earn.com</div>
+    <div style="font-size:12px;color:var(--g);margin-top:5px;" id="prof-day">Day 1 of 3</div>
+  </div>
+  <div class="pbody">
+    <div class="psr">
+      <div class="pst"><div class="psv" id="ps-bal">₦2,000</div><div class="psl">Balance</div></div>
+      <div class="pst"><div class="psv" id="ps-chats">0</div><div class="psl">Chats</div></div>
+      <div class="pst"><div class="psv" id="ps-day">Day 1</div><div class="psl">Current</div></div>
+    </div>
+    <div class="mrow" id="prof-kyc"><div class="mico">🪪</div><div class="mlbl">Complete KYC Verification</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-wd"><div class="mico">💸</div><div class="mlbl">Withdraw Earnings</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-lb"><div class="mico">🏆</div><div class="mlbl">View Leaderboard</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-terms"><div class="mico">📄</div><div class="mlbl">Terms & Conditions</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-tg"><div class="mico">✈️</div><div class="mlbl">Join Our Community</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-support"><div class="mico">💬</div><div class="mlbl">Contact Support</div><div class="marr">→</div></div>
+    <div class="mrow" id="prof-logout" style="border-color:var(--red);margin-top:8px;"><div class="mico">🚪</div><div class="mlbl" style="color:var(--red);">Logout</div><div class="marr" style="color:var(--red);">→</div></div>
+  </div>
+</div>
+
+<!-- TERMS -->
+<div class="page" id="pg-terms">
+  <div class="itopbar">
+    <button class="ibk" id="terms-back-btn">←</button>
+    <div class="ilogo">Terms & Conditions</div>
+    <div style="width:32px;"></div>
+  </div>
+  <div class="tbody">
+    <p style="font-size:13px;color:var(--mu);margin-top:8px;">Last updated: 2025. By using Chat-to-Earn you agree to these terms.</p>
+    <h3>1. Eligibility</h3><p>Open to Nigerian residents aged 18+. One account per person per device. Multiple accounts result in permanent ban.</p>
+    <h3>2. Earnings</h3><p>Users earn by completing chat sessions, daily tasks, and sharing. Earnings are credited in real time and subject to verification before withdrawal.</p>
+    <h3>3. Daily Login</h3><p>You must log in and complete at least 2 chat sessions every day. Missing a day resets your balance to zero. No exceptions.</p>
+    <h3>4. KYC Verification</h3><p>Identity verification is required before any withdrawal. Must be completed through our verified partner.</p>
+    <h3>5. Sharing</h3><p>Required WhatsApp shares must be completed after each session to unlock session bonuses. Each share is individually verified.</p>
+    <h3>6. Withdrawals</h3><p>Minimum ₦50,000. Available after Day 3 and KYC approval. Processing time up to 24 hours.</p>
+    <h3>7. Prohibited Activity</h3><p>Bots, scripts, VPNs or automated tools are strictly prohibited and result in immediate termination.</p>
+    <h3>8. Contact</h3>
+    <p>Support: <span class="tl2" id="terms-support">[YOUR SUPPORT EMAIL]</span></p>
+    <p>Community: <span class="tl2" id="terms-tg">[YOUR TELEGRAM LINK]</span></p>
+  </div>
+</div>
+
+<!-- WITHDRAW -->
+<div class="page" id="pg-wd">
+  <div class="wdwrap">
+    <button class="bbtn" id="wd-back-btn">← Back</button>
+    <div class="wdcard">
+      <h2>Withdraw Cash 💸</h2>
+      <p class="fsub">Minimum ₦50,000 · KYC required · Available after Day 3</p>
+      <div class="wdbal"><div class="wdbv" id="wd-bal">₦2,000</div><div class="wdbl">Available Balance</div></div>
+      <div class="wdlock" id="wd-lock">Complete 3 full days to unlock withdrawal.</div>
+      <div class="kycreq" id="kyc-req-wd">🪪 KYC verification required — Tap to complete now</div>
+      <div class="wdf"><label>Bank Name</label>
+        <select id="wd-bank">
+          <option value="">Select Bank</option>
+          <option>Opay</option><option>Palmpay</option><option>GTBank</option>
+          <option>Access Bank</option><option>First Bank</option><option>Zenith Bank</option>
+          <option>UBA</option><option>Kuda Bank</option><option>Moniepoint</option><option>Sterling Bank</option>
+        </select>
+      </div>
+      <div class="wdf"><label>Account Number</label><input type="tel" id="wd-acct" placeholder="10-digit account number" maxlength="10"></div>
+      <div class="wdf"><label>Account Name</label><input type="text" id="wd-aname" placeholder="Verified automatically"></div>
+      <div class="wdf"><label>Amount (₦)</label><input type="number" id="wd-amount" placeholder="Minimum ₦50,000"></div>
+      <button class="fsub-btn" id="wd-submit">Request Withdrawal</button>
+      <!-- AD SPOT — Withdraw page -->
+      <a href="javascript:void(0)" onclick="openLink('wd_ad1')" class="adspot-inline" style="margin-top:14px;">
+        <div class="adspot-ico">💡</div>
+        <div class="adspot-body"><div class="adspot-title">Earn Faster — Exclusive Tip for Members</div><div class="adspot-sub">Sponsored — tap to explore</div></div>
+        <div class="adspot-arrow">→</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- PROCESSING -->
+<div class="page" id="pg-proc">
+  <div class="spinner"></div>
+  <h2 style="font-size:20px;margin-bottom:8px;">Processing Withdrawal</h2>
+  <p style="font-size:13px;color:var(--mu);">Please wait while we verify and process</p>
+  <div class="psteps">
+    <div class="pstep done">Verifying account details</div>
+    <div class="pstep" id="ps2">Confirming KYC status</div>
+    <div class="pstep" id="ps3">Submitting withdrawal request</div>
+    <div class="pstep" id="ps4">Request queued for admin review</div>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<div class="page" id="pg-success">
+  <div style="font-size:68px;margin-bottom:16px;">🎉</div>
+  <h2 style="font-size:24px;margin-bottom:8px;">Request Received! 📋</h2>
+  <p style="font-size:13px;color:var(--mu);margin-bottom:20px;max-width:270px;line-height:1.6;">Your withdrawal request has been submitted and is being reviewed. Payment will be sent to your bank account within 24 hours of approval.</p>
+  <div style="background:var(--s);border:1px solid var(--br);border-radius:16px;padding:20px;width:100%;max-width:300px;margin-bottom:22px;">
+    <div style="font-size:12px;color:var(--mu);margin-bottom:4px;">Amount Requested</div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;color:var(--g);" id="succ-amt">₦50,000</div>
+    <div style="font-size:12px;color:var(--mu);margin-top:6px;">Processing: up to 24 hours</div>
+  </div>
+  <button class="gbtn" id="success-back-btn" style="max-width:300px;">Back to Dashboard</button>
+</div>
+
+<!-- ════ ADMIN LOGIN PAGE ════ -->
+<div class="page" id="pg-admin-login" style="background:#0A0F0D;align-items:center;justify-content:center;padding:32px 20px;">
+  <div style="width:100%;max-width:360px;">
+    <button id="admin-login-back" style="background:none;border:none;color:#7A9E90;font-size:14px;cursor:pointer;margin-bottom:20px;">← Back</button>
+    <div style="background:#121A16;border:1px solid #1F2E28;border-radius:20px;padding:28px;text-align:center;">
+      <div style="font-size:40px;margin-bottom:12px;">⚙️</div>
+      <h2 style="font-size:20px;margin-bottom:4px;color:#E8F5F0;">Admin Panel</h2>
+      <p style="font-size:13px;color:#7A9E90;margin-bottom:20px;">Chat-to-Earn Management</p>
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="display:block;font-size:11px;color:#7A9E90;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Password</label>
+        <input id="admin-pass-input" type="password" placeholder="••••••••"
+          style="display:block;width:100%;background:#1A2520;border:2px solid #1F2E28;border-radius:10px;padding:13px 14px;color:#E8F5F0;font-size:16px;font-family:Inter,sans-serif;outline:none;"
+          onkeydown="if(event.key==='Enter')document.getElementById('admin-login-btn').click()"/>
+      </div>
+      <div id="admin-login-err" style="display:none;background:rgba(255,107,107,.12);border:1px solid #FF6B6B;border-radius:8px;padding:9px 12px;font-size:13px;color:#FF6B6B;margin-bottom:12px;">Incorrect password.</div>
+      <button id="admin-login-btn" style="display:block;width:100%;background:#00C896;color:#000;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;padding:13px;border:none;border-radius:12px;cursor:pointer;">Login →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ ADMIN PANEL PAGE ════ -->
+<div class="page" id="pg-admin" style="background:#0A0F0D;flex-direction:column;overflow-y:auto;">
+
+  <!-- Sticky topbar -->
+  <div style="background:#0d1a14;border-bottom:1px solid #1F2E28;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:#00C896;">⚙️ Chat-to-Earn Admin</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="renderAdminPanel()" style="background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);color:#00C896;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;">🔄 Refresh</button>
+      <button id="admin-back-btn" style="background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.3);color:#FF6B6B;font-size:12px;font-weight:600;padding:6px 12px;border-radius:9px;cursor:pointer;">Logout</button>
+    </div>
+  </div>
+
+  <!-- Tab nav -->
+  <div style="display:flex;gap:0;border-bottom:1px solid #1F2E28;background:#0d1a14;overflow-x:auto;">
+    <button class="adm-tab active" onclick="switchAdminTab('withdrawals',this)">💸 Withdrawals</button>
+    <button class="adm-tab" onclick="switchAdminTab('kyc',this)">🪪 KYC</button>
+    <button class="adm-tab" onclick="switchAdminTab('users',this)">👥 Users</button>
+    <button class="adm-tab" onclick="switchAdminTab('stats',this)">📊 Stats</button>
+  </div>
+
+  <div style="padding:14px;max-width:760px;margin:0 auto;width:100%;padding-bottom:40px;">
+
+    <!-- STATS ROW -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:#121A16;border:1px solid #1F2E28;border-radius:14px;padding:14px;text-align:center;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;color:#FFD166;" id="adm-stat-pending">—</div>
+        <div style="font-size:11px;color:#7A9E90;margin-top:3px;">Pending Withdrawals</div>
+      </div>
+      <div style="background:#121A16;border:1px solid #1F2E28;border-radius:14px;padding:14px;text-align:center;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;color:#00C896;" id="adm-stat-amount">—</div>
+        <div style="font-size:11px;color:#7A9E90;margin-top:3px;">Total Pending (₦)</div>
+      </div>
+      <div style="background:#121A16;border:1px solid #1F2E28;border-radius:14px;padding:14px;text-align:center;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;color:#00C896;" id="adm-stat-users">—</div>
+        <div style="font-size:11px;color:#7A9E90;margin-top:3px;">Total Users</div>
+      </div>
+      <div style="background:#121A16;border:1px solid #1F2E28;border-radius:14px;padding:14px;text-align:center;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;color:#FF6B6B;" id="adm-stat-kyc">—</div>
+        <div style="font-size:11px;color:#7A9E90;margin-top:3px;">Pending KYC</div>
+      </div>
+    </div>
+
+    <!-- WITHDRAWALS TAB -->
+    <div id="adm-tab-withdrawals">
+      <!-- Filter bar -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;">
+        <button class="adm-filter active" onclick="filterWd('pending',this)">⏳ Pending</button>
+        <button class="adm-filter" onclick="filterWd('approved',this)">✅ Approved</button>
+        <button class="adm-filter" onclick="filterWd('rejected',this)">❌ Rejected</button>
+        <button class="adm-filter" onclick="filterWd('all',this)">All</button>
+      </div>
+      <div id="adm-wd-list"><div class="adm-loading">Loading withdrawals...</div></div>
+    </div>
+
+    <!-- KYC TAB -->
+    <div id="adm-tab-kyc" style="display:none;">
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="adm-filter active" onclick="filterKyc('pending',this)">⏳ Pending</button>
+        <button class="adm-filter" onclick="filterKyc('approved',this)">✅ Approved</button>
+        <button class="adm-filter" onclick="filterKyc('all',this)">All</button>
+      </div>
+      <div id="adm-kyc-list"><div class="adm-loading">Loading KYC requests...</div></div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div id="adm-tab-users" style="display:none;">
+      <div style="margin-bottom:12px;">
+        <input id="adm-user-search" type="text" placeholder="Search by name or email..." oninput="searchUsers()"
+          style="width:100%;background:#121A16;border:1.5px solid #1F2E28;border-radius:10px;padding:11px 14px;color:#E8F5F0;font-size:14px;outline:none;font-family:'DM Sans',sans-serif;"/>
+      </div>
+      <div id="adm-users-list"><div class="adm-loading">Loading users...</div></div>
+    </div>
+
+    <!-- STATS TAB -->
+    <div id="adm-tab-stats" style="display:none;">
+      <div id="adm-stats-content"><div class="adm-loading">Loading stats...</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬
+//         SITE CONFIGURATION — EDIT ALL LINKS HERE
+// ╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬╬
+
+var CONFIG = {
+
+  // ── SUPPORT & COMMUNITY ──────────────────────────────
+  telegram:             'https://omg10.com/4/10532479',
+  support_email:        'support@earn-chat.com',
+  site_url:             'https://earn-chat.com',
+
+  // ── KYC VERIFICATION LINK ──────────────────────────
+  // Paste your KYC verification partner link here.
+  // Users are sent here before they can withdraw.
+  kyc_url:              'https://jikgykm.com/cl/a9f1535a330a2652',
+
+  // ── DAILY TASK LINKS ───────────────────────────────
+  // Task 1 — Watch Video (Monetag/Adsterra video ad link)
+  task_video_url:       'https://jikgykm.com/cl/a9f1535a330a2652',
+  // Task 2 — Complete Offer (CPA offer / smartlink)
+  task_offer_url:       'https://www.effectivecpmnetwork.com/trxz4e2k9?key=e5fca8368b788c42dc7608d035de37f0',
+
+  // ── ADVERTISEMENT SPOTS ───────────────────────────
+  // Paste your Monetag or Adsterra smartlinks below.
+  ad_modal:             'https://jikgykm.com/cl/a9f1535a330a2652',   // Popup shown each day on login
+  ad_landing_top:       'https://jikgykm.com/cl/a9f1535a330a2652',   // Landing page — first ad
+  ad_landing_bottom:    'https://jikgykm.com/cl/a9f1535a330a2652',   // Landing page — second ad
+  ad_dashboard_top:     'https://www.effectivecpmnetwork.com/trxz4e2k9?key=e5fca8368b788c42dc7608d035de37f0',   // Dashboard — above chat partners
+  ad_dashboard_bottom:  'https://jikgykm.com/cl/a9f1535a330a2652',   // Dashboard — below tasks
+  ad_landing_3:         'https://jikgykm.com/cl/a9f1535a330a2652',   // Landing page — third ad
+  ad_share_page:        'https://www.effectivecpmnetwork.com/trxz4e2k9?key=e5fca8368b788c42dc7608d035de37f0', // Share wall ad
+  ad_claim_1:           'https://jikgykm.com/cl/a9f1535a330a2652',   // Claim page ad 1
+  ad_claim_2:           'https://www.effectivecpmnetwork.com/trxz4e2k9?key=e5fca8368b788c42dc7608d035de37f0', // Claim page ad 2
+  ad_withdraw_page:     'https://jikgykm.com/cl/a9f1535a330a2652',   // Withdraw page ad
+
+  // ── EARNINGS SETTINGS ──────────────────────────────
+  // 3-Day Plan to reach ₦50,000 minimum withdrawal:
+  //   Day 1 cap: ₦15,000  (signup ₦2k + tasks ₦4.5k + 4 chats × ₦2k + share ₦1.5k)
+  //   Day 2 cap: ₦17,000  (tasks ₦4.5k + 5 chats × ₦2k + share ₦1.5k)
+  //   Day 3 cap: ₦18,000  (tasks ₦4.5k + 5 chats × ₦2k + share ₦1.5k = exactly ₦50k total)
+  signup_bonus:         2000,    // Signup bonus (₦)
+  day_caps:             [15000, 17000, 18000], // Daily cap per day
+  daily_cap:            15000,   // Day 1 cap (updated dynamically per day)
+  daily_cap_vip:        100000,  // After first withdrawal — unlimited
+  earn_per_msg:         2000,    // Per chat message (₦)
+  earn_per_share:       500,     // Per WhatsApp share (₦) — 3 shares = ₦1,500
+  min_withdrawal:       50000,   // Minimum withdrawal (₦)
+  chat_cooldown:        180,     // Seconds between sessions
+  chat_cooldown_vip:    60,      // After first withdrawal
+
+};
+
+// Internal mappings — do not edit below this line
+var LINKS = {
+  modal:     CONFIG.ad_modal,
+  land1:     CONFIG.ad_landing_top,
+  land2:     CONFIG.ad_landing_bottom,
+  land3:     CONFIG.ad_landing_3,
+  kyc:       CONFIG.kyc_url,
+  dash1:     CONFIG.ad_dashboard_top,
+  video:     CONFIG.task_video_url,
+  offer:     CONFIG.task_offer_url,
+  dash2:     CONFIG.ad_dashboard_bottom,
+  share_ad1: CONFIG.ad_share_page,
+  claim_ad1: CONFIG.ad_claim_1,
+  claim_ad2: CONFIG.ad_claim_2,
+  wd_ad1:    CONFIG.ad_withdraw_page,
+};
+var TELEGRAM = CONFIG.telegram;
+var SUPPORT  = CONFIG.support_email;
+
+function openLink(key) {
+  var l = LINKS[key];
+  if (key === 'kyc') {
+    if (S.kycDone) { toast('✅ KYC already verified!'); return; }
+    if (S.kycPending) { toast('⏳ KYC submitted — awaiting admin approval.'); return; }
+    // Open the real KYC link
+    if (l && l.indexOf('YOUR') < 0) {
+      window.open(l, '_blank');
+    } else {
+      toast('KYC link not configured yet. Contact support.');
+      return;
+    }
+    // Mark as pending — admin must approve manually
+    S.kycPending = true;
+    saveState();
+    // Update KYC banner to pending state
+    var el = document.getElementById('kyc-banner');
+    if (el) {
+      el.style.background = 'linear-gradient(135deg,rgba(255,209,102,.08),rgba(255,209,102,.03))';
+      el.style.borderColor = 'var(--gold)';
+      el.innerHTML = '<div class="kyctop"><div class="kycico">⏳</div><div class="kyctitle" style="color:var(--gold)">KYC Submitted — Awaiting Approval</div></div><div class="kycsub">Your KYC has been submitted. An admin will review and approve it. You will be notified once approved.</div>';
+    }
+    toast('KYC submitted! Awaiting admin approval before withdrawal unlocks.');
+    return;
+  }
+  // For ad links — just open, no fake money
+  if (l && l.indexOf('YOUR') < 0) window.open(l, '_blank');
+  // Show temptation message
+  showTemptMsg(key);
+}
+function showKycVerified() {
+  var el = document.getElementById('kyc-banner');
+  if (el) {
+    el.style.background = 'linear-gradient(135deg,rgba(0,200,150,.08),rgba(0,200,150,.03))';
+    el.style.borderColor = 'var(--g)';
+    el.innerHTML = '<div class="kyctop"><div class="kycico">✅</div><div class="kyctitle" style="color:var(--g)">KYC Verified — You can now withdraw!</div></div><div class="kycsub">Your identity has been verified. Withdrawal is now unlocked once you reach Day 3 and ₦50,000.</div>';
+    el.style.display = 'block';
+  }
+  toast('KYC Verified! You can now withdraw on Day 3.');
+}
+var TEMPT_MSGS = {
+  dash1: '🔥 Limited spots available! This offer closes soon.',
+  dash2: '⚡ 847 Chat-to-Earn members just claimed this today!',
+  video: '🎬 Watch now — takes 30 seconds and unlocks a bonus task!',
+  offer: '💰 This offer expires in 2 hours. Do not miss out!',
+  land1: '🚀 Join the thousands of Nigerians earning daily!',
+  land2: '👀 Members who complete this earn 3x more per day!',
+  modal: '🎯 Exclusive — only shown to new members today!',
+};
+function showTemptMsg(key) {
+  var msg = TEMPT_MSGS[key];
+  if (msg) toast(msg);
+}
+
+// BACK NAVIGATION — clean, no trap
+window.addEventListener('popstate', function() {
+  // If logged in and on a sub-page, go back to dashboard
+  if (S.email) {
+    var dash = document.getElementById('pg-dash');
+    if (dash && !dash.classList.contains('on')) {
+      document.querySelectorAll('.page').forEach(function(p){p.classList.remove('on');});
+      dash.classList.add('on');
+    }
+  }
+});
+
+// No device limit — one account per email, tracked by localStorage state only
+
+// ════════════════════════════════════════════════
+//  STATE PERSISTENCE — balance survives refresh
+// ════════════════════════════════════════════════
+var STATE_KEY = 'cte_state_v2';
+
+var DEFAULT_STATE = {
+  supaId: null,
+  balance: CONFIG.signup_bonus,
+  name: 'Friend',
+  email: '',
+  day: 1,
+  dayEarnings: [CONFIG.signup_bonus, 0, 0],
+  chats: 0,
+  shares: 0,
+  tasks: { checkin: false, video: false, offer: false, dailyShare: false },
+  dailyShareCount: 0,       // how many daily shares done today (need 3)
+  dailyShareTarget: 3,
+  pendingUnlock: 0,
+  swDone: 0,
+  swTarget: 5,
+  chatMsgCount: 0,
+  chatEarned: 0,
+  lastLogin: new Date().toDateString(),
+  missedDay: false,
+  kycDone: false,
+  kycPending: false,
+  hasWithdrawn: false,
+  capWarningShown: false,
+  lastChatTime: 0,
+  chatCooldownSecs: CONFIG.chat_cooldown,
+  withdrawals: [],
+  notifShown: false,        // whether today's auto-notif has fired
+  notifPartnerIdx: 0        // which partner is "calling"
+};
+
+function saveState() {
+  try { localStorage.setItem(STATE_KEY, JSON.stringify(S)); } catch(e) {}
+  // Sync to Supabase in background
+  if (S.supaId && _supa) {
+    _supa.from('profiles').update({
+      balance: S.balance,
+      day: S.day,
+      day_earnings: S.dayEarnings,
+      chats: S.chats,
+      shares: S.shares,
+      tasks: S.tasks,
+      daily_share_count: S.dailyShareCount || 0,
+      kyc_done: S.kycDone,
+      kyc_pending: S.kycPending,
+      has_withdrawn: S.hasWithdrawn,
+      last_login: S.lastLogin,
+      missed_day: S.missedDay,
+      withdrawals: S.withdrawals || []
+    }).eq('id', S.supaId).then(function(){}).catch(function(){});
+  }
+}
+
+function loadState() {
+  // Only load from localStorage if no Supabase session exists
+  // (Supabase always takes priority — handled in auto-route)
+  try {
+    var raw = localStorage.getItem(STATE_KEY);
+    if (raw) {
+      var saved = JSON.parse(raw);
+      S = Object.assign({}, DEFAULT_STATE, saved);
+      S.tasks = Object.assign({}, DEFAULT_STATE.tasks, saved.tasks || {});
+      if (!S.withdrawals) S.withdrawals = [];
+      if (!S.dayEarnings || S.dayEarnings.length < 3) S.dayEarnings = DEFAULT_STATE.dayEarnings;
+    }
+  } catch(e) {
+    S = Object.assign({}, DEFAULT_STATE);
+  }
+}
+
+var S = Object.assign({}, DEFAULT_STATE);
+loadState();
+
+// PAGE NAVIGATION
+function pg(id) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('on'); });
+  document.getElementById(id).classList.add('on');
+  window.scrollTo(0, 0);
+}
+
+// DAY MODAL
+function showDayModal() {
+  var msgs = [
+    {ico:'🎉', title:'Welcome to Day 1!', body:'Your ₦2,000 bonus is ready. Complete your chats and tasks today!', target:'Target: ₦15,000'},
+    {ico:'🔥', title:'Day 2 — Keep Going!', body:'You made it to Day 2! Complete your tasks. Halfway to withdrawal!', target:'Target: ₦17,000'},
+    {ico:'💸', title:'Day 3 — Withdrawal Day!', body:'Today is the day! Complete tasks and unlock your withdrawal!', target:'Withdraw Today!'},
+  ];
+  var m = msgs[Math.min(S.day - 1, 2)];
+  document.getElementById('dm-ico').textContent = m.ico;
+  document.getElementById('dm-title').textContent = m.title;
+  document.getElementById('dm-body').textContent = m.body;
+  document.getElementById('dm-target').textContent = m.target;
+  document.getElementById('day-modal').classList.add('show');
+}
+function closeDayModal() { document.getElementById('day-modal').classList.remove('show'); }
+
+// HELPERS
+function showErr(id, msg) { var el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; }
+function hideErr(id) { document.getElementById(id).style.display = 'none'; }
+function fmt(n) { return '₦' + Math.floor(n).toLocaleString(); }
+function addBal(n) {
+  var dayIdx = S.day - 1;
+  // Use per-day cap; after withdrawal unlock VIP cap
+  var dailyCap = S.hasWithdrawn
+    ? CONFIG.daily_cap_vip
+    : (CONFIG.day_caps[dayIdx] || CONFIG.daily_cap);
+  if (!S.dayEarnings[dayIdx]) S.dayEarnings[dayIdx] = 0;
+  var dayE = S.dayEarnings[dayIdx];
+  var space = dailyCap - dayE;
+  if (space <= 0) {
+    if (!S.capWarningShown) { S.capWarningShown = true; showCapWarning(); }
+    return;
+  }
+  var allowed = Math.min(n, space);
+  S.balance = (S.balance || 0) + allowed;
+  S.dayEarnings[dayIdx] = dayE + allowed;
+  saveState();
+  updateUI();
+}
+function showCapWarning() {
+  var msg = S.hasWithdrawn
+    ? 'Daily limit reached! Come back tomorrow to earn more.'
+    : 'Daily limit reached! Complete your first withdrawal to unlock unlimited earnings.';
+  toast(msg);
+  // Show unlock banner
+  var banner = document.getElementById('unlock-banner');
+  if (banner) banner.style.display = 'block';
+}
+function toast(msg) { var t = document.getElementById('TT'); t.textContent = msg; t.classList.add('on'); setTimeout(function() { t.classList.remove('on'); }, 2800); }
+function showEarnToast(msg) { var t = document.getElementById('ET'); t.textContent = msg; t.classList.add('on'); setTimeout(function() { t.classList.remove('on'); }, 2000); }
+
+// ALL BUTTON EVENTS — attached here, not in HTML
+document.getElementById('modal-close-btn').addEventListener('click', closeDayModal);
+document.getElementById('modal-ad').addEventListener('click', function() { openLink('modal'); });
+
+document.getElementById('land-signup-btn').addEventListener('click', function() { pg('pg-register'); });
+document.getElementById('land-signup-btn2').addEventListener('click', function() { pg('pg-register'); });
+document.getElementById('land-login-btn').addEventListener('click', function() { pg('pg-login'); });
+document.getElementById('land-ad1').addEventListener('click', function() { openLink('land1'); });
+document.getElementById('land-ad2').addEventListener('click', function() { openLink('land2'); });
+document.getElementById('land-ad3').addEventListener('click', function() { openLink('land3'); });
+// Hidden admin button — looks like a copyright text at the bottom
+document.getElementById('admin-secret-btn').addEventListener('click', function(){ pg('pg-admin-login'); });
+document.getElementById('admin-secret-btn').addEventListener('touchend', function(e){ e.preventDefault(); pg('pg-admin-login'); }, {passive:false});
+
+document.getElementById('reg-back-btn').addEventListener('click', function() { pg('pg-landing'); });
+document.getElementById('go-login').addEventListener('click', function() { pg('pg-login'); });
+document.getElementById('reg-submit').addEventListener('click', async function() {
+  var name  = document.getElementById('reg-name').value.trim();
+  var email = document.getElementById('reg-email').value.trim();
+  var pass  = document.getElementById('reg-pass').value.trim();
+  if (!name)              { showErr('reg-err', 'Please enter your full name'); return; }
+  if (!email || email.indexOf('@') < 0) { showErr('reg-err', 'Please enter a valid email address'); return; }
+  if (pass.length < 6)   { showErr('reg-err', 'Password must be at least 6 characters'); return; }
+  hideErr('reg-err');
+
+  // Show loading state
+  var btn = document.getElementById('reg-submit');
+  btn.textContent = 'Creating account...'; btn.disabled = true;
+
+  var res = await sbSignUp(email, pass, name);
+
+  if (res.error) {
+    var msg = res.error.message || '';
+    // If Supabase not configured, proceed locally
+    if (msg.indexOf('not configured') > -1 || msg.indexOf('local mode') > -1) {
+      // local mode — skip Supabase, still work
+    } else if (msg.indexOf('already registered') > -1 || msg.indexOf('already exists') > -1) {
+      showErr('reg-err', 'This email is already registered. Please login instead.');
+      btn.textContent = 'Create Account — Get ₦2,000'; btn.disabled = false;
+      return;
+    } else if (msg.length > 0) {
+      showErr('reg-err', msg);
+      btn.textContent = 'Create Account — Get ₦2,000'; btn.disabled = false;
+      return;
+    }
+  }
+
+  // Success — set local state (works with or without Supabase)
+  S.name = name.split(' ')[0];
+  S.email = email;
+  S.supaId = (res.data && res.data.user) ? res.data.user.id : null;
+  S.lastLogin = new Date().toDateString();
+  document.getElementById('wname').textContent = S.name;
+  btn.textContent = 'Create Account — Get ₦2,000'; btn.disabled = false;
+  saveState(); updateUI(); pg('pg-welcome');
+});
+
+document.getElementById('login-back-btn').addEventListener('click', function() { pg('pg-landing'); });
+document.getElementById('go-register').addEventListener('click', function() { pg('pg-register'); });
+document.getElementById('login-submit').addEventListener('click', async function() {
+  var email = document.getElementById('login-email').value.trim();
+  var pass  = document.getElementById('login-pass').value.trim();
+  if (!email || email.indexOf('@') < 0) { showErr('login-err', 'Please enter a valid email address'); return; }
+  if (!pass)  { showErr('login-err', 'Please enter your password'); return; }
+  hideErr('login-err');
+
+  var btn = document.getElementById('login-submit');
+  btn.textContent = 'Logging in...'; btn.disabled = true;
+
+  var res = await sbLogin(email, pass);
+
+  if (res.error) {
+    var raw = res.error.message || res.error.code || '';
+    // Local mode — bypass Supabase and login with stored state
+    if (raw.indexOf('not configured') > -1 || raw.indexOf('local mode') > -1) {
+      if (S.email && S.email.toLowerCase() === email.toLowerCase()) {
+        // Known user from localStorage — let them in
+      } else {
+        // New login attempt in local mode — create local session
+        S.email = email;
+        S.name = email.split('@')[0];
+        S.lastLogin = new Date().toDateString();
+      }
+    } else {
+      var msg = raw;
+      if (raw.indexOf('Email not confirmed') > -1)
+        msg = 'Please confirm your email first, or turn off email confirmation in Supabase dashboard.';
+      else if (raw.indexOf('Invalid') > -1 || raw.indexOf('invalid') > -1 || raw.indexOf('credentials') > -1 || raw.indexOf('AuthRetryable') > -1 || raw.indexOf('Load failed') > -1 || raw.indexOf('status":0') > -1)
+        msg = 'Login failed. Check your internet connection and try again.';
+      else if (raw.indexOf('User not found') > -1)
+        msg = 'No account found. Please register first.';
+      else if (raw.length > 0)
+        msg = 'Connection error. Please check your internet and try again.';
+      showErr('login-err', msg);
+      btn.textContent = 'Login to Dashboard'; btn.disabled = false;
+      return;
+    }
+  }
+
+  // Load profile from Supabase and merge into local state
+  var uid = (res.data && res.data.user) ? res.data.user.id : null;
+  var bonus = (window.CONFIG && window.CONFIG.signup_bonus) ? window.CONFIG.signup_bonus : 2000;
+  var profile = uid ? await sbGetProfile(uid) : null;
+  if (profile) {
+    S.supaId          = uid;
+    S.name            = profile.full_name ? profile.full_name.split(' ')[0] : email.split('@')[0];
+    S.email           = email;
+    S.balance         = profile.balance != null ? profile.balance : bonus;
+    S.day             = profile.day || 1;
+    S.dayEarnings     = profile.day_earnings || [bonus, 0, 0];
+    S.chats           = profile.chats || 0;
+    S.shares          = profile.shares || 0;
+    S.kycDone         = profile.kyc_done || false;
+    S.kycPending      = profile.kyc_pending || false;
+    S.hasWithdrawn    = profile.has_withdrawn || false;
+    S.tasks           = profile.tasks || { checkin:false, video:false, offer:false, dailyShare:false };
+    S.dailyShareCount = profile.daily_share_count || 0;
+    S.missedDay       = false;
+    S.lastLogin       = profile.last_login || '';
+    S.withdrawals     = profile.withdrawals || [];
+  } else {
+    // Profile missing or no Supabase — use localStorage state
+    if (uid) { S.supaId = uid; }
+    S.email = email;
+    if (!S.name) S.name = email.split('@')[0];
+    if (!S.lastLogin) S.lastLogin = '';
+  }
+
+  // Daily reset/advance logic
+  var today = new Date().toDateString();
+  if (S.lastLogin && S.lastLogin !== today) {
+    var lastDate = new Date(S.lastLogin);
+    var todayDate = new Date(today);
+    var diff = Math.round((todayDate - lastDate) / 86400000);
+    if (diff > 1) {
+      S.balance = bonus; S.day = 1;
+      S.dayEarnings = [bonus, 0, 0];
+      S.chats = 0; S.shares = 0;
+      S.tasks = { checkin:false, video:false, offer:false, dailyShare:false };
+      S.dailyShareCount = 0; S.hasWithdrawn = false;
+      S.capWarningShown = false; S.missedDay = true; S.notifShown = false;
+    } else if (diff === 1) {
+      S.day = Math.min(3, S.day + 1); S.missedDay = false;
+      S.tasks = { checkin:false, video:false, offer:false, dailyShare:false };
+      S.dailyShareCount = 0; S.capWarningShown = false; S.notifShown = false;
+    }
+  }
+  S.lastLogin = today;
+  saveState();
+
+  // Sync back to Supabase (non-blocking)
+  if (uid) {
+    sbSaveProfile(uid, {
+      balance: S.balance, day: S.day,
+      day_earnings: S.dayEarnings, chats: S.chats,
+      shares: S.shares, tasks: S.tasks,
+      daily_share_count: S.dailyShareCount,
+      last_login: S.lastLogin, missed_day: S.missedDay,
+      has_withdrawn: S.hasWithdrawn
+    });
+  }
+
+  btn.textContent = 'Login to Dashboard'; btn.disabled = false;
+  updateUI(); pg('pg-dash');
+  setTimeout(showDayModal, 600);
+  setTimeout(startAutoNotifs, 1200);
+});
+
+document.getElementById('start-btn').addEventListener('click', function() {
+  pg('pg-dash');
+  setTimeout(showDayModal, 500);
+  setTimeout(startAutoNotifs, 1000);
+});
+
+// DASHBOARD buttons
+document.getElementById('kyc-banner').addEventListener('click', function() { openLink('kyc'); });
+document.getElementById('dash-ad1').addEventListener('click', function() { openLink('dash1'); });
+document.getElementById('dash-ad2').addEventListener('click', function() { openLink('dash2'); });
+document.getElementById('video-link').addEventListener('click', function(e) { e.stopPropagation(); openLink('video'); });
+document.getElementById('offer-link').addEventListener('click', function(e) { e.stopPropagation(); openLink('offer'); });
+document.getElementById('tsk-checkin').addEventListener('click', doCheckin);
+document.getElementById('tsk-video').addEventListener('click', doVideoTask);
+document.getElementById('tsk-offer').addEventListener('click', doOfferTask);
+
+// NAV
+document.getElementById('nb-home').addEventListener('click', function() { setNav(this); });
+document.getElementById('nb-chat').addEventListener('click', function() { setNav(this); scrollToPartners(); });
+document.getElementById('nb-lb').addEventListener('click', function() { showLB(); });
+document.getElementById('nb-wd').addEventListener('click', function() { pg('pg-wd'); });
+document.getElementById('nb-prof').addEventListener('click', function() { pg('pg-profile'); });
+
+// CHAT
+document.getElementById('chat-back-btn').addEventListener('click', function() { pg('pg-dash'); scheduleNextNotif(20000); });
+document.getElementById('send-btn').addEventListener('click', sendMsg);
+document.getElementById('chat-inp').addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+document.getElementById('chat-inp').addEventListener('input', function(){
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+// SHARE
+document.getElementById('wa-btn').addEventListener('click', doShare);
+
+// CLAIM
+document.getElementById('claim-continue-btn').addEventListener('click', function() { pg('pg-dash'); scheduleNextNotif(10000); });
+
+// LB / PROFILE
+document.getElementById('lb-back-btn').addEventListener('click', function() { pg('pg-dash'); scheduleNextNotif(15000); });
+document.getElementById('prof-back-btn').addEventListener('click', function() { pg('pg-dash'); scheduleNextNotif(15000); });
+document.getElementById('terms-back-btn').addEventListener('click', function() { pg('pg-profile'); });
+document.getElementById('prof-kyc').addEventListener('click', function() { openLink('kyc'); });
+document.getElementById('prof-wd').addEventListener('click', function() { pg('pg-wd'); });
+document.getElementById('prof-lb').addEventListener('click', showLB);
+document.getElementById('prof-terms').addEventListener('click', function() { pg('pg-terms'); });
+document.getElementById('prof-tg').addEventListener('click', function() { window.open(TELEGRAM, '_blank'); });
+document.getElementById('prof-support').addEventListener('click', function() { toast('Support: ' + SUPPORT); });
+document.getElementById('prof-logout').addEventListener('click', function() { pg('pg-landing'); });
+document.getElementById('terms-support').addEventListener('click', function() { toast('Support: ' + SUPPORT); });
+document.getElementById('terms-tg').addEventListener('click', function() { window.open(TELEGRAM, '_blank'); });
+
+// WITHDRAW
+document.getElementById('wd-back-btn').addEventListener('click', function() { pg('pg-dash'); });
+document.getElementById('kyc-req-wd').addEventListener('click', function() { openLink('kyc'); });
+document.getElementById('wd-submit').addEventListener('click', doWithdraw);
+document.getElementById('success-back-btn').addEventListener('click', function() { pg('pg-dash'); });
+
+// ════════════════════════════════════════════════
+//  CHAT AUTO-NOTIFICATION ENGINE
+// ════════════════════════════════════════════════
+var notifTimer = null, notifPIdx = 0;
+var NOTIF_OPENERS = [
+  'Hey! So glad to finally connect with someone from Nigeria 👋',
+  'Hi! I\'ve been wanting to chat with someone from Nigeria for a while now!',
+  'Hello! A friend just told me about this and I had to try it 😊',
+  'Hey there! Nigeria is literally on my travel list — so excited to chat!',
+  'Hi! I got into Afrobeats last year and I need to know more about Nigeria 🎶',
+  'Hello! Just joined and you\'re my first Nigerian chat — what\'s life like there?',
+  'Hey! My colleague visited Lagos and won\'t stop talking about it. Tell me everything!',
+];
+
+function pickNotifPartner() {
+  // Pick a random partner not recently used
+  notifPIdx = Math.floor(Math.random() * Math.min(10, P.length));
+  return P[notifPIdx];
+}
+
+function showChatNotif() {
+  if (!S.email) return; // only if logged in
+  var partner = pickNotifPartner();
+  var msg = NOTIF_OPENERS[Math.floor(Math.random() * NOTIF_OPENERS.length)];
+  document.getElementById('cn-av').textContent = partner.e;
+  document.getElementById('cn-name').textContent = partner.n;
+  document.getElementById('cn-flag').textContent = partner.f + ' ' + partner.l + ' · Online now';
+  document.getElementById('cn-preview').innerHTML = '"' + msg + '"';
+  S.notifPartnerIdx = notifPIdx;
+  // Store opener so chat starts with this message
+  S._pendingNotifMsg = msg;
+  var notif = document.getElementById('chat-notif');
+  notif.classList.add('show');
+  // Show badge on chat nav
+  document.getElementById('chat-nav-badge').style.display = 'flex';
+  // Auto-dismiss after 12s if not tapped
+  if (notifTimer) clearTimeout(notifTimer);
+  notifTimer = setTimeout(function() {
+    hideChatNotif();
+    scheduleNextNotif(60000); // next one in 60s
+  }, 12000);
+}
+
+function hideChatNotif() {
+  document.getElementById('chat-notif').classList.remove('show');
+}
+
+function scheduleNextNotif(delayMs) {
+  if (notifTimer) clearTimeout(notifTimer);
+  notifTimer = setTimeout(function() {
+    var onDash = document.getElementById('pg-dash').classList.contains('on');
+    if (onDash && S.email) showChatNotif();
+    else scheduleNextNotif(30000);
+  }, delayMs || 5000);
+}
+
+function startAutoNotifs() {
+  // First notif: 5 seconds after landing on dashboard
+  scheduleNextNotif(5000);
+  // Subsequent ones reschedule themselves every 60s automatically
+}
+
+document.getElementById('cn-dismiss-btn').addEventListener('click', function() {
+  hideChatNotif();
+  document.getElementById('chat-nav-badge').style.display = 'none';
+  scheduleNextNotif(90000);
+});
+
+document.getElementById('cn-open-btn').addEventListener('click', function() {
+  hideChatNotif();
+  document.getElementById('chat-nav-badge').style.display = 'none';
+  if (notifTimer) clearTimeout(notifTimer);
+  // Start the chat with the notified partner and pre-set the opener
+  var idx = S.notifPartnerIdx || 0;
+  var preMsg = S._pendingNotifMsg || null;
+  startChat(idx, preMsg);
+});
+
+// ════════════════════════════════════════════════
+//  DAILY SHARE TASK
+// ════════════════════════════════════════════════
+function renderDailyShareTask() {
+  var done = S.dailyShareCount || 0;
+  var target = S.dailyShareTarget || 3;
+  var pct = Math.min(100, Math.floor((done / target) * 100));
+  document.getElementById('daily-share-bar').style.width = pct + '%';
+  var prog = document.getElementById('daily-share-prog');
+  var btn  = document.getElementById('tsk-daily-share-btn');
+  var wrap = document.getElementById('tsk-daily-share');
+  if (S.tasks.dailyShare) {
+    prog.textContent = '✅ Daily share completed! +₦1,500 earned';
+    btn.disabled = true; btn.textContent = '✅ Done for today';
+    wrap.classList.add('done');
+  } else {
+    prog.textContent = done + ' of ' + target + ' shares done — required to unlock today\'s earnings';
+    btn.disabled = false; btn.textContent = '💬 Share on WhatsApp (' + done + '/' + target + ')';
+    wrap.classList.remove('done');
+  }
+}
+
+document.getElementById('tsk-daily-share-btn').addEventListener('click', function() {
+  if (S.tasks.dailyShare) { toast('✅ Daily share already completed!'); return; }
+  var msg = encodeURIComponent('🔥 I just earned ' + fmt(S.balance) + ' chatting on Chat-to-Earn! Real money paid to your Nigerian bank in 3 days. Join free 👉 ' + CONFIG.site_url);
+  window.open('https://wa.me/?text=' + msg, '_blank');
+  // Simulate verification after 4 seconds
+  var btn = document.getElementById('tsk-daily-share-btn');
+  btn.disabled = true; btn.textContent = 'Verifying share...';
+  setTimeout(function() {
+    S.dailyShareCount = Math.min(S.dailyShareTarget, (S.dailyShareCount || 0) + 1);
+    if (S.dailyShareCount >= S.dailyShareTarget) {
+      S.tasks.dailyShare = true;
+      addBal(1500);
+      showEarnToast('+₦1,500 daily share bonus!');
+      toast('✅ Daily share completed! Your earnings are fully unlocked today.');
+    } else {
+      toast('Share ' + S.dailyShareCount + '/' + S.dailyShareTarget + ' confirmed! Keep going.');
+      btn.disabled = false;
+      btn.textContent = '💬 Share on WhatsApp (' + S.dailyShareCount + '/' + S.dailyShareTarget + ')';
+    }
+    saveState();
+    renderDailyShareTask();
+  }, 4000);
+});
+
+// ════════════════════════════════════════════════
+//  UI UPDATE
+// ════════════════════════════════════════════════
+function updateUI() {
+  document.getElementById('top-bal').innerHTML = fmt(S.balance) + ' <span>Your balance</span>';
+  document.getElementById('bal-amt').textContent = fmt(S.balance);
+  document.getElementById('wd-bal').textContent  = fmt(S.balance);
+  document.getElementById('st-chats').textContent  = S.chats;
+  document.getElementById('st-shares').textContent = S.shares;
+  document.getElementById('st-day').textContent    = S.day;
+  document.getElementById('ps-bal').textContent    = fmt(S.balance);
+  document.getElementById('ps-chats').textContent  = S.chats;
+  document.getElementById('ps-day').textContent    = 'Day ' + S.day;
+  document.getElementById('prof-name').textContent = S.name;
+  document.getElementById('prof-email').textContent = S.email || 'user@chat-to-earn.com';
+  document.getElementById('prof-day').textContent  = 'Day ' + S.day + ' of 3';
+  document.getElementById('my-rank').textContent   = '#' + Math.max(1, 312 - S.chats * 4);
+  var dayTargets = CONFIG.day_caps || [15000, 17000, 18000];
+  var target = dayTargets[S.day - 1] || 18000;
+  var dayE = S.dayEarnings[S.day - 1] || 0;
+  document.getElementById('pfill').style.width = Math.min(96, Math.floor((dayE / target) * 100)) + '%';
+  document.getElementById('dp-title').textContent = 'Day ' + S.day + ' of 3';
+  document.getElementById('dp-badge').textContent = 'DAY ' + S.day;
+  document.getElementById('dp-sub').textContent = fmt(dayE) + ' earned today of ' + fmt(target) + ' target';
+  document.getElementById('bal-sub').textContent = 'Day ' + S.day + ' target: ' + fmt(target) + (S.day < 3 ? ' · Withdraw on Day 3' : ' · Ready to withdraw!');
+  document.getElementById('missed-bar').style.display = S.missedDay ? 'block' : 'none';
+  // KYC banner state
+  var kycBanner = document.getElementById('kyc-banner');
+  var kycReqWd  = document.getElementById('kyc-req-wd');
+  if (S.kycDone) {
+    kycBanner.style.display = 'none';
+    kycReqWd.style.display  = 'none';
+  } else if (S.kycPending) {
+    kycBanner.style.display = 'block';
+    kycBanner.style.background = 'linear-gradient(135deg,rgba(255,209,102,.08),rgba(255,209,102,.03))';
+    kycBanner.style.borderColor = 'var(--gold)';
+    kycBanner.innerHTML = '<div class="kyctop"><div class="kycico">⏳</div><div class="kyctitle" style="color:var(--gold)">KYC Submitted — Awaiting Approval</div></div><div class="kycsub">Your KYC has been submitted. An admin will review and approve it. You will be notified once approved.</div>';
+    kycReqWd.textContent  = '⏳ KYC pending admin approval';
+    kycReqWd.style.display = 'block';
+  } else {
+    kycBanner.style.display = 'block';
+    kycReqWd.style.display  = 'block';
+  }
+  var canWd = S.day >= 3 && S.balance >= 50000 && S.kycDone;
+  var wdl = document.getElementById('wd-lock');
+  wdl.style.display = canWd ? 'none' : 'block';
+  if (!canWd) wdl.textContent = !S.kycDone ? 'Complete your KYC first. Tap the banner above.' : S.day < 3 ? 'Withdrawal unlocks on Day 3. Currently Day ' + S.day + '.' : 'You need ₦50,000 minimum. Balance: ' + fmt(S.balance);
+  renderPartners();
+  renderDailyShareTask();
+
+  // Gate: if daily share not done, show warning on balance card
+  var balSub = document.getElementById('bal-sub');
+  if (!S.tasks.dailyShare && S.email) {
+    balSub.innerHTML = '⚠️ <span style="color:var(--gold)">Complete Daily Share to fully unlock earnings</span>';
+  }
+}
+
+// PARTNERS
+// Real face photos from randomuser.me (free, no key needed)
+// Photos are seeded by name so they're consistent every time
+function getPhoto(seed, gender){
+  var g = gender || 'women';
+  var num = Math.abs(seed.split('').reduce(function(a,c){return a+c.charCodeAt(0);},0)) % 70 + 1;
+  return 'https://randomuser.me/api/portraits/'+g+'/'+num+'.jpg';
+}
+
+var P = [
+  {n:'Sarah M.',f:'🇬🇧',l:'London, UK',e:'👩‍🦰',g:'women',t:'Travel, Business',s:'You are Sarah, 28, marketing manager from London. Warm and genuinely curious about Nigeria. Max 2 short casual sentences per reply. No dashes.'},
+  {n:'James K.',f:'🇺🇸',l:'New York, USA',e:'👨‍💼',g:'men',t:'Tech, Finance',s:'You are James, 31, software engineer from NYC. Energetic, loves tech. Max 2 short sentences. Casual texting.'},
+  {n:'Emma L.',f:'🇨🇦',l:'Toronto, Canada',e:'👩‍🎓',g:'women',t:'Food, Health',s:'You are Emma, 26, nutrition student from Toronto. Bubbly, loves Nigerian food. Max 2 sentences.'},
+  {n:'Liam P.',f:'🇦🇺',l:'Sydney, Australia',e:'🧑‍🎤',g:'men',t:'Music, Sports',s:'You are Liam, 29, music producer from Sydney. Loves Afrobeats. Max 2 laid back sentences.'},
+  {n:'Sophia R.',f:'🇩🇪',l:'Berlin, Germany',e:'👩‍💻',g:'women',t:'Tech, Art',s:'You are Sophia, 27, UX designer from Berlin. Loves African art. Max 2 natural sentences.'},
+  {n:'Noah T.',f:'🇺🇸',l:'Houston, USA',e:'👨‍🔬',t:'Science, NBA',s:'You are Noah, 33, teacher from Houston. Loves sports. Max 2 casual sentences.'},
+  {n:'Olivia F.',f:'🇬🇧',l:'Manchester, UK',e:'👩‍🏫',t:'Education',s:'You are Olivia, 30, teacher from Manchester. Warm. Max 2 short sentences.'},
+  {n:'Ethan B.',f:'🇨🇦',l:'Vancouver, Canada',e:'🧑‍💼',t:'Fitness',s:'You are Ethan, personal trainer from Vancouver. Casual. Max 2 sentences.'},
+  {n:'Ava W.',f:'🇺🇸',l:'Los Angeles, USA',e:'👩‍🎨',t:'Fashion, Film',s:'You are Ava, 25, fashion blogger from LA. Max 2 fun sentences.'},
+  {n:'Mason C.',f:'🇦🇺',l:'Melbourne, Australia',e:'👨‍🍳',t:'Food, Travel',s:'You are Mason, chef from Melbourne. Excited about Nigerian food. Max 2 sentences.'},
+  {n:'Isabella J.',f:'🇫🇷',l:'Paris, France',e:'👩‍🎭',t:'Art, Culture',s:'You are Isabella, 29, art curator from Paris. Warm. Max 2 sentences.'},
+  {n:'Logan H.',f:'🇺🇸',l:'Chicago, USA',e:'🧑‍🎤',t:'Music, Comedy',s:'You are Logan, comedian from Chicago. Funny and casual. Max 2 sentences.'},
+  {n:'Mia S.',f:'🇩🇪',l:'Munich, Germany',e:'👩‍⚕️',t:'Medicine',s:'You are Mia, medical student from Munich. Curious. Max 2 sentences.'},
+  {n:'Lucas N.',f:'🇺🇸',l:'Miami, USA',e:'🧑‍💻',t:'Crypto, Tech',s:'You are Lucas, crypto trader from Miami. Max 2 casual sentences.'},
+  {n:'Charlotte A.',f:'🇨🇦',l:'Montreal, Canada',e:'👩‍🌾',t:'Food',s:'You are Charlotte, food photographer from Montreal. Max 2 warm sentences.'},
+  {n:'Henry M.',f:'🇬🇧',l:'Bristol, UK',e:'👨‍🎨',t:'Design, Music',s:'You are Henry, graphic designer from Bristol. Loves Afrobeats. Max 2 casual sentences.'},
+  {n:'Amelia D.',f:'🇦🇺',l:'Brisbane, Australia',e:'👩‍💼',t:'Business',s:'You are Amelia, entrepreneur from Brisbane. Max 2 short sentences.'},
+  {n:'Sebastian V.',f:'🇩🇪',l:'Hamburg, Germany',e:'👨‍🏭',t:'Engineering',s:'You are Sebastian, engineer from Hamburg who loves football. Max 2 sentences.'},
+  {n:'Harper G.',f:'🇺🇸',l:'Seattle, USA',e:'👩‍🔬',t:'Data, Tech',s:'You are Harper, data scientist from Seattle. Friendly. Max 2 sentences.'},
+  {n:'Jack R.',f:'🇨🇦',l:'Calgary, Canada',e:'🧑‍🏔️',t:'Adventure',s:'You are Jack, outdoor guide from Calgary. Bold and fun. Max 2 sentences.'},
+  {n:'Scarlett T.',f:'🇺🇸',l:'Nashville, USA',e:'👩‍🎵',t:'Music',s:'You are Scarlett from Nashville. Loves Afrobeats now. Max 2 sentences.'},
+  {n:'Daniel O.',f:'🇬🇧',l:'Edinburgh, UK',e:'👨‍🏫',t:'History',s:'You are Daniel, history lecturer from Edinburgh. Max 2 engaging sentences.'},
+  {n:'Aria F.',f:'🇫🇷',l:'Lyon, France',e:'👩‍🍳',t:'Cooking',s:'You are Aria, chef from Lyon who loves Nigerian food. Max 2 warm sentences.'},
+  {n:'Matthew E.',f:'🇺🇸',l:'Boston, USA',e:'🧑‍⚕️',t:'Medicine',s:'You are Matthew, medical resident from Boston. Max 2 short sentences.'},
+  {n:'Luna K.',f:'🇩🇪',l:'Frankfurt, Germany',e:'👩‍🎓',t:'Languages',s:'You are Luna, linguistics student who studies African languages. Max 2 excited sentences.'},
+  {n:'Ryan B.',f:'🇦🇺',l:'Perth, Australia',e:'👨‍💻',t:'Gaming, Tech',s:'You are Ryan, game developer from Perth. Max 2 casual sentences.'},
+  {n:'Zoe M.',f:'🇨🇦',l:'Ottawa, Canada',e:'👩‍🏛️',t:'Law',s:'You are Zoe, law student from Ottawa. Max 2 short sentences.'},
+  {n:'Tyler W.',f:'🇺🇸',l:'Austin, USA',e:'🧑‍🎸',t:'Music, Tech',s:'You are Tyler, musician from Austin who loves Afrobeats. Max 2 casual sentences.'},
+  {n:'Nora J.',f:'🇬🇧',l:'Liverpool, UK',e:'👩‍🏥',t:'Nursing',s:'You are Nora, nurse from Liverpool. Caring and warm. Max 2 sentences.'},
+  {n:'Elijah C.',f:'🇺🇸',l:'Atlanta, USA',e:'👨‍🎤',t:'Music, Fashion',s:'You are Elijah, music director from Atlanta. Max 2 energetic sentences.'},
+  {n:'Hannah S.',f:'🇦🇺',l:'Adelaide, Australia',e:'👩‍🎓',t:'Psychology',s:'You are Hannah, psychology student from Adelaide. Warm listener. Max 2 sentences.'},
+  {n:'Owen T.',f:'🇨🇦',l:'Toronto, Canada',e:'👨‍🍳',t:'Food, Basketball',s:'You are Owen, restaurant owner from Toronto. Max 2 casual sentences.'},
+  {n:'Grace L.',f:'🇫🇷',l:'Bordeaux, France',e:'👩‍🍷',t:'Wine, Travel',s:'You are Grace, sommelier from Bordeaux. Max 2 short sentences.'},
+  {n:'Leo H.',f:'🇩🇪',l:'Cologne, Germany',e:'👨‍🎨',t:'Art, Music',s:'You are Leo, street artist from Cologne who loves Afrobeats. Max 2 natural sentences.'},
+  {n:'Victoria P.',f:'🇬🇧',l:'Oxford, UK',e:'👩‍🔬',t:'Research',s:'You are Victoria, research scientist from Oxford. Max 2 thoughtful sentences.'},
+  {n:'Julian M.',f:'🇺🇸',l:'San Francisco, USA',e:'🧑‍💼',t:'Startups',s:'You are Julian, startup founder from SF. Interested in African tech. Max 2 energetic sentences.'},
+  {n:'Chloe R.',f:'🇨🇦',l:'Winnipeg, Canada',e:'👩‍🎨',t:'Art',s:'You are Chloe, illustrator from Winnipeg. Max 2 casual sentences.'},
+  {n:'Nathan V.',f:'🇦🇺',l:'Canberra, Australia',e:'👨‍💼',t:'Finance',s:'You are Nathan, financial advisor from Canberra. Max 2 short sentences.'},
+  {n:'Penelope W.',f:'🇬🇧',l:'Leeds, UK',e:'👩‍💻',t:'Cybersecurity',s:'You are Penelope, cybersecurity analyst from Leeds. Max 2 sentences.'},
+  {n:'Samuel A.',f:'🇺🇸',l:'Dallas, USA',e:'👨‍🏈',t:'Football',s:'You are Samuel, sports agent from Dallas. Max 2 direct sentences.'},
+  {n:'Isla F.',f:'🇨🇦',l:'Halifax, Canada',e:'👩‍🎤',t:'Poetry',s:'You are Isla, poet from Halifax. Max 2 short sentences.'},
+  {n:'Chris N.',f:'🇩🇪',l:'Stuttgart, Germany',e:'👨‍🔧',t:'Engineering',s:'You are Chris, automotive engineer from Stuttgart. Max 2 casual sentences.'},
+  {n:'Layla B.',f:'🇫🇷',l:'Marseille, France',e:'👩‍🌊',t:'Ocean, Travel',s:'You are Layla, marine biologist from Marseille. Max 2 warm sentences.'},
+  {n:'Aaron G.',f:'🇦🇺',l:'Gold Coast, Australia',e:'🏄',t:'Surfing',s:'You are Aaron, surf instructor who loves Afrobeats. Max 2 fun sentences.'},
+  {n:'Stella K.',f:'🇬🇧',l:'Cambridge, UK',e:'👩‍🔬',t:'Science',s:'You are Stella, biochemist from Cambridge. Max 2 short sentences.'},
+    {n:'Dylan R.',f:'🇺🇸',l:'Portland, USA',e:'🧑‍🌾',t:'Environment',s:'You are Dylan, environmental activist from Portland. Max 2 sentences.'},
+  {n:'Aurora M.',f:'🇨🇦',l:'Edmonton, Canada',e:'👩‍🎓',t:'Medicine, Art',s:'You are Aurora, medical student who paints. Max 2 warm sentences.'},
+  {n:'Felix T.',f:'🇩🇪',l:'Dresden, Germany',e:'👨‍🎓',t:'Philosophy',s:'You are Felix, philosophy student who loves Fela Kuti. Max 2 thoughtful sentences.'},
+  {n:'Ruby H.',f:'🇦🇺',l:'Hobart, Australia',e:'👩‍🍳',t:'Baking',s:'You are Ruby, pastry chef curious about Nigerian desserts. Max 2 warm sentences.'},
+  {n:'Oscar J.',f:'🇬🇧',l:'Birmingham, UK',e:'👨‍🎭',t:'Theatre',s:'You are Oscar, theatre director from Birmingham. Max 2 engaging sentences.'},
+];
+
+var OPENS = ['Hey! So glad to finally connect with someone from Nigeria. I have always been curious about life there. How are you?','Hi! Oh wow Nigeria! I have been wanting to talk to someone from there. What part are you from?','Hello! I have heard so much about Nigeria lately. What is daily life like where you are?','Hey there! Really happy to chat with you. Tell me something interesting about your city!','Hi! I got into Afrobeats last year and it made me so curious about Nigeria. What do you do for fun?','Hey! A friend visited Lagos recently and could not stop talking about it. What is it really like?','Hello! I have been reading about Nigeria. Is the tech scene as exciting as they say?'];
+var FALLS = ['Oh that is really interesting! Tell me more about that.','Wow I had no idea! What else is life like over there?','Honestly that sounds amazing. Nigeria is on my travel list now.','Ha that made me smile! You have a great personality.','Really? I would never have guessed. What else should I know?','That makes total sense. I am learning so much from this chat.','No way! That is wild. Do most people there feel the same?','I genuinely enjoy this. Nigeria sounds so vibrant.','This is exactly why I love chatting with people from different countries.','You have officially made my day with that.'];
+
+var TESTIS = [
+  {e:'👩',n:'Chioma A.',l:'Lagos',s:'★★★★★',t:'I could not believe it when the money hit my Opay. Three days of chatting and I withdrew 52,000. This is the realest thing online.',a:'52,000 received'},
+  {e:'👨',n:'Emeka O.',l:'Abuja',s:'★★★★★',t:'I told my brother and he thought I was joking. Now he is on Day 2 himself. The money is real.',a:'58,000 received'},
+  {e:'👧',n:'Fatima B.',l:'Kano',s:'★★★★★',t:'As a student I needed something that works. Chat-to-Earn paid me within 20 hours of requesting.',a:'51,500 received'},
+  {e:'🧑',n:'Tunde M.',l:'Ibadan',s:'★★★★★',t:'Spent 3 days chatting with people from London and Canada. Interesting and real cash to GTBank.',a:'55,000 received'},
+  {e:'👩',n:'Ngozi C.',l:'Enugu',s:'★★★★★',t:'I had tried so many sites before. This one is different. I did not miss a day and it paid off.',a:'50,500 received'},
+  {e:'👨',n:'Chukwudi I.',l:'Rivers',s:'★★★★★',t:'Every time I shared after a chat my balance jumped. Hit 50,000 on day 3 and withdrew same day.',a:'62,000 received'},
+  {e:'👩',n:'Aisha D.',l:'Kaduna',s:'★★★★★',t:'Do not miss a day! I missed once and had to start over. Second time I was disciplined and got paid.',a:'51,000 received'},
+  {e:'🧑',n:'Bola F.',l:'Delta',s:'★★★★★',t:'My cousin sent me proof of payment first. Best decision I made this month to join.',a:'53,500 received'},
+  {e:'👨',n:'Seun A.',l:'Ogun',s:'★★★★★',t:'The chat sessions are genuinely interesting. I enjoyed every conversation and got real money.',a:'57,000 received'},
+  {e:'👩',n:'Adaeze N.',l:'Anambra',s:'★★★★★',t:'I shared with 5 friends and all of them have now received their payments. It is real.',a:'50,000 received'},
+  {e:'👨',n:'Kola E.',l:'Lagos',s:'★★★★★',t:'Three days went fast. The tasks and chats kept me engaged. Withdrawal processed in 18 hours.',a:'54,000 received'},
+  {e:'👩',n:'Grace U.',l:'Imo',s:'★★★★★',t:'I set alarms to log in every day. Could not afford to lose my balance. Day 3 was the sweetest.',a:'50,500 received'},
+  {e:'👨',n:'Yemi A.',l:'Lagos',s:'★★★★★',t:'At first I thought it was too good to be true. But my friend got paid first. Got mine Day 3.',a:'56,000 received'},
+  {e:'👩',n:'Blessing O.',l:'Rivers',s:'★★★★★',t:'The share bonuses alone added thousands to my balance. I love this platform so much.',a:'53,000 received'},
+];
+var PAYS = [
+  {e:'👩',n:'Chioma A. — Lagos',a:'52,000 to Opay',t:'23 mins ago'},
+  {e:'👨',n:'Emeka O. — Abuja',a:'58,500 to GTBank',t:'1 hr ago'},
+  {e:'👧',n:'Fatima B. — Kano',a:'51,000 to Palmpay',t:'2 hrs ago'},
+  {e:'🧑',n:'Tunde M. — Ibadan',a:'55,000 to Access Bank',t:'3 hrs ago'},
+  {e:'👩',n:'Ngozi C. — Enugu',a:'50,500 to First Bank',t:'4 hrs ago'},
+  {e:'👨',n:'Chukwudi I. — Rivers',a:'62,000 to Opay',t:'5 hrs ago'},
+  {e:'👩',n:'Blessing O. — Delta',a:'53,000 to Palmpay',t:'6 hrs ago'},
+  {e:'👨',n:'Yemi A. — Lagos',a:'56,000 to Kuda',t:'7 hrs ago'},
+];
+var LBD = [
+  {e:'👩',n:'Chioma A.',s:'Lagos',a:312000},{e:'👨',n:'Emeka O.',s:'Abuja',a:287500},
+  {e:'👧',n:'Fatima B.',s:'Kano',a:265000},{e:'🧑',n:'Tunde M.',s:'Ibadan',a:241000},
+  {e:'👩',n:'Ngozi C.',s:'Enugu',a:220000},{e:'👨',n:'Chukwudi I.',s:'Rivers',a:198000},
+  {e:'👩',n:'Aisha D.',s:'Kaduna',a:175000},{e:'🧑',n:'Bola F.',s:'Delta',a:163000},
+  {e:'👨',n:'Seun A.',s:'Ogun',a:149000},{e:'👩',n:'Adaeze N.',s:'Anambra',a:132000},
+];
+
+(function() {
+  document.getElementById('testi-list').innerHTML = TESTIS.map(function(t) {
+    return '<div class="tc">'
+      +'<div class="ttop"><div class="tav">'+t.e+'</div>'
+      +'<div><div class="tnm">'+t.n+'</div><div class="tlc">'+t.l+'</div></div>'
+      +'<div class="tst">'+t.s+'</div>'
+      +'<div class="tverified">✅ Verified</div></div>'
+      +'<div class="ttxt">'+t.t+'</div>'
+      +'<span class="tamt">💸 ₦'+t.a+'</span>'
+      +'</div>';
+  }).join('');
+  document.getElementById('pay-list').innerHTML = PAYS.map(function(p) {
+    return '<div class="prow"><div class="pav">'+p.e+'</div><div><div class="pnm">'+p.n+'</div><div class="pam">₦'+p.a+'</div></div><div class="ptm">'+p.t+'</div></div>';
+  }).join('');
+})();
+
+function setNav(el) { document.querySelectorAll('.nbtn').forEach(function(b){b.classList.remove('on');}); el.classList.add('on'); }
+function scrollToPartners() { setTimeout(function(){var el=document.getElementById('partners-list');if(el)el.scrollIntoView({behavior:'smooth'});},100); }
+
+function getCooldownText(){
+  var now=Math.floor(Date.now()/1000);
+  var cooldown=S.hasWithdrawn?CONFIG.chat_cooldown_vip:CONFIG.chat_cooldown;
+  var elapsed=now-S.lastChatTime;
+  if(S.lastChatTime>0 && elapsed<cooldown){
+    var remaining=cooldown-elapsed;
+    var mins=Math.floor(remaining/60),secs=remaining%60;
+    return (mins>0?mins+'m ':'')+secs+'s';
+  }
+  return null;
+}
+function renderPartners() {
+  var now = Math.floor(Date.now()/1000);
+  var cooldown = S.hasWithdrawn ? CONFIG.chat_cooldown_vip : CONFIG.chat_cooldown;
+  var remaining = Math.max(0, cooldown - (now - S.lastChatTime));
+  var mins = Math.floor(remaining/60), secs = remaining%60;
+  var previews = [
+    'Hey! So happy to finally chat with someone from Nigeria 🇳🇬',
+    'Hi! I\'ve been wanting to connect with someone from there',
+    'Hello! Tell me about life in Nigeria! 😊',
+    'Hey! Nigeria is on my travel list ✈️',
+    'Hi! I love Afrobeats — are you into music?',
+    'What\'s the best Nigerian food? I need to know 🍛',
+    'Hey! A friend visited Lagos and won\'t stop talking about it',
+    'Hi! Tell me something interesting about where you live!',
+    'Hello! I\'ve been learning about Nigerian culture 🌍',
+    'Hey! What music do you listen to? I love Burna Boy',
+  ];
+  var times = ['just now','2m ago','1m ago','5m ago','now','3m ago','4m ago','6m ago','now','2m ago'];
+
+  document.getElementById('partners-list').innerHTML = P.slice(0,10).map(function(p,i){
+    var g = p.g || (p.e && (p.e.includes('👩')||p.e.includes('👧')) ? 'women' : 'men');
+    var photo = getPhoto(p.n, g);
+    var locked = remaining > 0 && S.lastChatTime > 0;
+    var onclick = locked
+      ? 'toast("⏱ Wait '+mins+'m '+secs+'s before next chat")'
+      : 'openMatch('+i+')';
+    return '<div class="pcard-premium" onclick="'+onclick+'">'
+      +'<div class="pc-av-wrap">'
+      +'<img class="pc-av-img" src="'+photo+'" alt="'+p.n
+      +'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'"/>'
+      +'<div style="display:none;width:52px;height:52px;border-radius:50%;background:rgba(0,200,150,.18);border:2px solid var(--g);align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">'+p.e+'</div>'
+      +'<div class="pc-online-ring"></div><div class="pc-dot"></div>'
+      +'</div>'
+      +'<div class="pc-info">'
+      +'<div class="pc-name">'+p.n+' <span style="font-size:11px;font-weight:400;color:var(--mu)">'+p.f+'</span></div>'
+      +'<div class="pc-loc">'+p.l+'</div>'
+      +'<div class="pc-preview">'+previews[i]+'</div>'
+      +'</div>'
+      +'<div class="pc-right">'
+      +'<div class="pc-earn">+₦'+CONFIG.earn_per_msg.toLocaleString()+'</div>'
+      +'<div class="pc-time">'+times[i]+'</div>'
+      +(locked ? '<div style="font-size:9px;color:var(--gold);">⏱ '+mins+'m '+secs+'s</div>' : '<div class="pc-unread">1</div>')
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+// ── MATCH REVEAL ──
+function openMatch(idx){
+  var p = P[idx];
+  var g = p.g || (p.e && (p.e.includes('👩')||p.e.includes('👧')) ? 'women' : 'men');
+  var photo = getPhoto(p.n, g);
+  document.getElementById('match-av-img').src = photo;
+  document.getElementById('match-name').textContent = p.n;
+  document.getElementById('match-loc').textContent = p.f+' '+p.l;
+  document.getElementById('match-interests').textContent = p.t;
+  // Random opener
+  var opener = NOTIF_OPENERS ? NOTIF_OPENERS[Math.floor(Math.random()*NOTIF_OPENERS.length)] : OPENS[Math.floor(Math.random()*OPENS.length)];
+  document.getElementById('match-msg').textContent = '"'+opener+'"';
+  pg('pg-match');
+
+  document.getElementById('match-accept-btn').onclick = function(){
+    startChat(idx, opener);
+  };
+  document.getElementById('match-skip-btn').onclick = function(){
+    pg('pg-dash');
+    setTimeout(function(){ showChatNotif(); }, 2000);
+  };
+}
+
+// ── PREMIUM addMsg ──
+function getTime(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+
+function addMsg(side, text, opts){
+  opts = opts || {};
+  var msgs = document.getElementById('chat-msgs');
+  var wrap = document.createElement('div');
+  wrap.className = 'msg ' + side;
+
+  if(side === 'them'){
+    var g = curP && curP.g ? curP.g : 'women';
+    var photo = curP ? getPhoto(curP.n, g) : '';
+    var avHtml = photo
+      ? '<img class="msg-avatar" src="'+photo+'" alt="" onerror="this.style.display=\'none\'"/>'
+      : '<div style="width:28px;height:28px;border-radius:50%;background:rgba(0,200,150,.18);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">'+(curP?curP.e:'👩')+'</div>';
+
+    // Voice note style
+    if(opts.voice){
+      var bars = Array(12).fill(0).map(function(_,i){
+        return '<div class="vn-bar" style="animation-delay:'+(i*0.08)+'s;height:'+(4+Math.random()*14)+'px"></div>';
+      }).join('');
+      wrap.innerHTML = avHtml+'<div class="msg-body"><div class="voice-note"><div class="vn-play">▶</div><div class="vn-wave">'+bars+'</div><div class="vn-dur">0:'+Math.floor(Math.random()*20+5)+'</div></div>'
+        +'<div class="msg-meta"><span class="msg-time-txt">'+getTime()+'</span></div></div>';
+    }
+    // Image message
+    else if(opts.img){
+      wrap.innerHTML = avHtml+'<div class="msg-body"><img class="msg-img" src="'+opts.img+'" alt=""/>'
+        +'<div class="msg-meta"><span class="msg-time-txt">'+getTime()+'</span></div></div>';
+    }
+    // Normal text
+    else {
+      var reactionHtml = opts.reaction ? '<div class="msg-reaction">'+opts.reaction+'</div>' : '';
+      wrap.innerHTML = avHtml+'<div class="msg-body"><div class="bubble" style="position:relative;">'+text+reactionHtml+'</div>'
+        +'<div class="msg-meta"><span class="msg-time-txt">'+getTime()+'</span></div></div>';
+    }
+  } else {
+    // User message
+    wrap.innerHTML = '<div class="msg-body"><div class="bubble">'+text+'</div>'
+      +'<div class="msg-meta"><span class="msg-time-txt">'+getTime()+'</span><span class="read-tick">✓✓</span></div></div>';
+    // Upgrade tick to blue after 1.5s (read receipt)
+    setTimeout(function(){
+      var tick = wrap.querySelector('.read-tick');
+      if(tick) tick.style.color = '#4FC3F7';
+    }, 1500);
+  }
+
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyper(){
+  var m=document.getElementById('chat-msgs');
+  var d=document.createElement('div');
+  d.className='msg them';d.id='typer';
+  var g = curP && curP.g ? curP.g : 'women';
+  var photo = curP ? getPhoto(curP.n, g) : '';
+  var avHtml = photo
+    ? '<img class="msg-avatar" src="'+photo+'" alt="" onerror="this.style.display=\'none\'"/>'
+    : '<div style="width:28px;height:28px;border-radius:50%;background:rgba(0,200,150,.18);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">'+(curP?curP.e:'👩')+'</div>';
+  d.innerHTML = avHtml+'<div class="msg-body"><div class="typewrap"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div></div>';
+  m.appendChild(d);
+  m.scrollTop=m.scrollHeight;
+}
+
+function rmTyper(){var t=document.getElementById('typer');if(t)t.remove();}{if(S.tasks.checkin){toast('Already checked in!');return;}S.tasks.checkin=true;addBal(1000);saveState();document.getElementById('tsk-checkin').classList.add('done');showEarnToast('+₦1,000 check-in bonus!');}
+function doVideoTask(){
+  if(S.tasks.video){toast('Already done today!');return;}
+  var el=document.getElementById('tsk-video');
+  el.style.opacity='0.6';el.style.pointerEvents='none';
+  var t=document.createElement('div');t.style.cssText='font-size:12px;color:var(--g);margin-top:8px;padding:8px;background:rgba(0,200,150,.1);border-radius:8px;';
+  t.id='video-timer';t.textContent='Watching video... Please wait 45 seconds';el.appendChild(t);
+  openLink('video');
+  var secs=45;
+  var iv=setInterval(function(){
+    secs--;
+    var tt=document.getElementById('video-timer');
+    if(tt)tt.textContent='Watching video... '+secs+' seconds remaining';
+    if(secs<=0){
+      clearInterval(iv);
+      S.tasks.video=true;addBal(1500);saveState();el.classList.add('done');
+      showEarnToast('+₦1,500 video bonus!');
+    }
+  },1000);
+}
+function doOfferTask(){
+  if(S.tasks.offer){toast('Already done today!');return;}
+  var el=document.getElementById('tsk-offer');
+  el.style.opacity='0.6';el.style.pointerEvents='none';
+  var t=document.createElement('div');t.style.cssText='font-size:12px;color:var(--g);margin-top:8px;padding:8px;background:rgba(0,200,150,.1);border-radius:8px;';
+  t.id='offer-timer';t.textContent='Completing offer... Please wait 60 seconds';el.appendChild(t);
+  openLink('offer');
+  var secs=60;
+  var iv=setInterval(function(){
+    secs--;
+    var tt=document.getElementById('offer-timer');
+    if(tt)tt.textContent='Completing offer... '+secs+' seconds remaining';
+    if(secs<=0){
+      clearInterval(iv);
+      S.tasks.offer=true;addBal(2000);saveState();el.classList.add('done');
+      showEarnToast('+₦2,000 offer bonus!');
+    }
+  },1000);
+}
+
+var chatConvo=[],chatPending=false,curP=null;
+function startChat(idx, presetOpener){
+  var now=Math.floor(Date.now()/1000);
+  var cooldown=S.hasWithdrawn?CONFIG.chat_cooldown_vip:CONFIG.chat_cooldown;
+  var elapsed=now-S.lastChatTime;
+  if(S.lastChatTime>0 && elapsed<cooldown){
+    var remaining=cooldown-elapsed;
+    var mins=Math.floor(remaining/60),secs=remaining%60;
+    toast('Please wait '+(mins>0?mins+'m ':'')+secs+'s before next chat.');
+    return;
+  }
+  S.lastChatTime=now; saveState();
+  curP=P[idx];S.chatMsgCount=0;S.chatEarned=0;chatConvo=[];
+
+  // Premium header — real photo
+  var g = curP.g || (curP.e && (curP.e.includes('👩')||curP.e.includes('👧')) ? 'women' : 'men');
+  var photo = getPhoto(curP.n, g);
+  var img = document.getElementById('c-av-img');
+  if(img){ img.src = photo; img.alt = curP.n; }
+
+  document.getElementById('c-name').textContent = curP.n+' '+curP.f;
+  document.getElementById('c-stat').textContent = 'typing...';
+  document.getElementById('c-earn').textContent = '₦0 earned';
+  document.getElementById('chat-inp').disabled=false;
+  document.getElementById('chat-inp').placeholder='Type your message...';
+  document.getElementById('chat-msgs').innerHTML='';
+  document.getElementById('chat-qr').innerHTML='';
+  pg('pg-chat');
+
+  // Partner sends first message
+  var opener = presetOpener || OPENS[Math.floor(Math.random()*OPENS.length)];
+  var delay = presetOpener ? 1200 : (2000 + Math.random()*2000);
+  showTyper();
+  setTimeout(function(){
+    rmTyper();
+    addMsg('them', opener);
+    document.getElementById('c-stat').textContent = 'Online now';
+    // Quick reply suggestions after first message — staggered appearance
+    setTimeout(function(){
+      var qr = document.getElementById('chat-qr');
+      var suggestions = ['Hi! 👋', 'Hello there!', 'Nice to meet you!', 'Hey! 😊'];
+      qr.innerHTML = suggestions.map(function(s, i){
+        return '<div class="qr-chip" style="animation-delay:'+(i*0.18)+'s" onclick="sendQuickReply(\''+s+'\')">'+s+'</div>';
+      }).join('');
+    }, 1200);
+    // Occasionally send a city image after 8s
+    if(Math.random() > 0.5){
+      setTimeout(function(){
+        var cityImages = {
+          '🇬🇧': 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=300&q=80',
+          '🇺🇸': 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=300&q=80',
+          '🇨🇦': 'https://images.unsplash.com/photo-1517935706615-2717063c2225?w=300&q=80',
+          '🇦🇺': 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=300&q=80',
+          '🇩🇪': 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=300&q=80',
+          '🇫🇷': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=300&q=80',
+        };
+        var img = cityImages[curP.f] || cityImages['🇬🇧'];
+        var captions = ['This is my city 😊','Views from here!','My neighbourhood ✨','Weekend vibes here 🌆'];
+        addMsg('them', captions[Math.floor(Math.random()*captions.length)]);
+        setTimeout(function(){ addMsg('them','',{img:img}); }, 600);
+      }, 8000);
+    }
+  }, delay);
+}
+
+function sendQuickReply(text){
+  document.getElementById('chat-qr').innerHTML='';
+  var inp = document.getElementById('chat-inp');
+  inp.value = text;
+  sendMsg();
+}
+function addMsg(side,text){
+  var msgs=document.getElementById('chat-msgs');
+  var div=document.createElement('div');div.className='msg '+side;
+  var now=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  div.innerHTML='<div class="mbub">'+text+'</div><div class="mmeta">'+now+'</div>';
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+  chatConvo.push({role:side==='them'?'assistant':'user',content:text});
+}
+function showTyper(){var m=document.getElementById('chat-msgs'),d=document.createElement('div');d.className='msg them';d.id='typer';d.innerHTML='<div class="typewrap"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';m.appendChild(d);m.scrollTop=m.scrollHeight;}
+function rmTyper(){var t=document.getElementById('typer');if(t)t.remove();}
+
+async function sendMsg(){
+  if(chatPending)return;
+  var inp=document.getElementById('chat-inp');
+  var text=inp.value.trim();if(!text)return;
+  inp.value=''; inp.style.height='auto';
+  document.getElementById('chat-qr').innerHTML='';
+  addMsg('me',text);S.chatMsgCount++;
+
+  var dailyCap = S.hasWithdrawn ? CONFIG.daily_cap_vip : (CONFIG.day_caps[S.day-1]||CONFIG.daily_cap);
+  var dayE = S.dayEarnings[S.day-1]||0;
+  if(dayE >= dailyCap){
+    if(!S.capWarningShown){S.capWarningShown=true;showCapWarning();}
+    inp.placeholder='Daily limit reached.';inp.disabled=true;return;
+  }
+
+  var earn = Math.min(CONFIG.earn_per_msg, dailyCap - dayE);
+  S.chatEarned = (S.chatEarned||0) + earn;
+  addBal(earn);
+  document.getElementById('c-earn').textContent = fmt(S.chatEarned)+' earned this session';
+  showEarnToast('+₦'+earn.toLocaleString()+' earned!');
+
+  if(S.chatMsgCount===3){
+    S.pendingUnlock = S.chatEarned;
+    S.swDone=0;
+    document.getElementById('sw-sess').textContent=fmt(S.pendingUnlock);
+    document.getElementById('sw-total').textContent=fmt(S.pendingUnlock);
+    document.getElementById('sv-msg').textContent='';
+    document.getElementById('sv-msg').className='svmsg';
+    document.getElementById('wa-btn').className='wabtn go';
+    document.getElementById('wa-btn-txt').textContent='Tap to Share on WhatsApp';
+    renderSwDots();
+    setTimeout(function(){
+      rmTyper();
+      addMsg('them','Hold on just a moment! I will be right back 😊');
+      document.getElementById('c-stat').textContent='Away';
+      setTimeout(function(){pg('pg-share');},1200);
+    },800);
+    return;
+  }
+
+  chatPending=true;
+  document.getElementById('c-stat').textContent='typing...';
+  showTyper();
+  var delay=2500+Math.random()*2000;
+
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',max_tokens:1000,
+        system:curP.s+' Write like a real person texting. Never start with dashes. Keep it warm and natural.',
+        messages:chatConvo.slice(-6)
+      })
+    });
+    var data=await res.json();
+    var reply=(data.content&&data.content[0]&&data.content[0].text)||FALLS[Math.floor(Math.random()*FALLS.length)];
+    reply=reply.replace(/[-–—]\s+/g,' ').trim();
+    await new Promise(function(r){setTimeout(r,delay);});
+    rmTyper();
+    document.getElementById('c-stat').textContent='Online now';
+
+    // Occasionally add reaction or voice note for realism
+    var rand = Math.random();
+    if(rand < 0.12 && S.chatMsgCount >= 2){
+      // Voice note instead of text
+      addMsg('them','',{voice:true});
+      setTimeout(function(){ addMsg('them', reply); }, 1200);
+    } else {
+      var reaction = rand < 0.25 ? ['❤️','😂','😮','🙌','🔥'][Math.floor(Math.random()*5)] : null;
+      addMsg('them', reply, {reaction: reaction});
+    }
+  }catch(e){
+    await new Promise(function(r){setTimeout(r,delay);});
+    rmTyper();
+    document.getElementById('c-stat').textContent='Online now';
+    addMsg('them',FALLS[Math.floor(Math.random()*FALLS.length)]);
+  }
+  chatPending=false;
+}
+
+function renderSwDots(){
+  var c=document.getElementById('sw-dots');c.innerHTML='';
+  for(var i=0;i<S.swTarget;i++){var d=document.createElement('div');d.className='sdot'+(i<S.swDone?' filled':'');d.textContent=i<S.swDone?'\u2713':(i+1);c.appendChild(d);}
+  document.getElementById('sw-done-txt').textContent=S.swDone+' / '+S.swTarget;
+  document.getElementById('sw-total').textContent=fmt(S.pendingUnlock+S.swDone*500);
+  document.getElementById('sw-prog').textContent=S.swDone+' of '+S.swTarget+' shares done';
+}
+function doShare(){
+  if(S.swDone>=S.swTarget){toast('All shares completed!');return;}
+  var msg=encodeURIComponent('I just earned '+fmt(S.balance)+' chatting with foreigners on Chat-to-Earn! Real money paid to your Nigerian bank in 3 days. Join free: '+CONFIG.site_url);
+  window.open('https://wa.me/?text='+msg,'_blank');
+  var btn=document.getElementById('wa-btn'),btntxt=document.getElementById('wa-btn-txt'),sv=document.getElementById('sv-msg');
+  btn.className='wabtn wait';btntxt.textContent='Verifying your share...';sv.textContent='';sv.className='svmsg';
+  var vDelay=4000+Math.floor(Math.random()*2000);
+  setTimeout(function(){
+    S.swDone++;S.shares++;
+    addBal(CONFIG.earn_per_share); // routed through cap-safe addBal
+    sv.textContent='Share '+S.swDone+' confirmed! +₦'+CONFIG.earn_per_share.toLocaleString()+' credited.';
+    sv.className='svmsg svok';
+    btn.className='wabtn go';
+    btntxt.textContent=S.swDone>=S.swTarget?'All Shares Done!':'Tap to Share Again';
+    renderSwDots();
+    saveState();
+    if(S.swDone>=S.swTarget){
+      S.chats++;
+      saveState();
+      // Show claim page — balance already updated via addBal above
+      document.getElementById('clm-amt').textContent=fmt(S.chatEarned + S.swTarget*CONFIG.earn_per_share);
+      document.getElementById('clm-chat').textContent=fmt(S.chatEarned);
+      document.getElementById('clm-shares').textContent=fmt(S.swTarget*CONFIG.earn_per_share);
+      document.getElementById('clm-bal').textContent=fmt(S.balance);
+      setTimeout(function(){pg('pg-claim');},600);
+    }
+  },vDelay);
+}
+
+function showLB(){
+  var icons=['🥇','🥈','🥉'];
+  document.getElementById('lb-list').innerHTML=LBD.map(function(u,i){
+    return '<div class="lbi"><div class="lbrank '+(i<3?'gld':'')+'">'+(i<3?icons[i]:(i+1))+'</div><div class="lbav">'+u.e+'</div><div style="flex:1"><div class="lbnm">'+u.n+'</div><div class="lbst">'+u.s+'</div></div><div class="lbe">'+fmt(u.a)+'</div></div>';
+  }).join('');
+  pg('pg-lb');
+}
+
+function doWithdraw(){
+  if(!S.kycDone){
+    if(S.kycPending){ toast('⏳ KYC pending admin approval. Please wait.'); return; }
+    toast('Complete your KYC first'); openLink('kyc'); return;
+  }
+  if(S.day<3){toast('Withdrawal unlocks on Day 3. Currently Day '+S.day);return;}
+  if(S.balance<CONFIG.min_withdrawal){toast('You need at least '+fmt(CONFIG.min_withdrawal)+' to withdraw');return;}
+  var bank=document.getElementById('wd-bank').value;
+  var acct=document.getElementById('wd-acct').value;
+  var aname=document.getElementById('wd-aname').value.trim();
+  var amount=parseInt(document.getElementById('wd-amount').value);
+  if(!bank){toast('Please select your bank');return;}
+  if(!acct||acct.length<10){toast('Please enter a valid 10-digit account number');return;}
+  if(!amount||amount<CONFIG.min_withdrawal){toast('Minimum withdrawal is '+fmt(CONFIG.min_withdrawal));return;}
+  if(amount>S.balance){toast('Amount exceeds your balance');return;}
+
+  // Queue the withdrawal for manual admin review
+  var request = {
+    id: 'WD-' + Date.now(),
+    name: S.name,
+    email: S.email,
+    bank: bank,
+    account: acct,
+    accountName: aname || 'Not provided',
+    amount: amount,
+    requestedAt: new Date().toLocaleString(),
+    status: 'pending'   // admin sets to 'approved' or 'rejected'
+  };
+
+  // Deduct from balance immediately and hold
+  S.balance -= amount;
+  S.withdrawals.push(request);
+  saveState();
+
+  // Store in admin queue (separate localStorage key visible to admin panel)
+  try {
+    var queue = JSON.parse(localStorage.getItem('cte_wd_queue') || '[]');
+    queue.push(request);
+    localStorage.setItem('cte_wd_queue', JSON.stringify(queue));
+  } catch(e) {}
+
+  document.getElementById('succ-amt').textContent = fmt(amount);
+  pg('pg-proc');
+  // Animate steps — no fake transfer, just submission confirmation
+  ['ps2','ps3','ps4'].forEach(function(id,i){
+    setTimeout(function(){
+      document.getElementById(id).classList.add('done');
+      if(i===2) setTimeout(function(){ pg('pg-success'); }, 800);
+    },(i+1)*1200);
+  });
+}
+
+updateUI();
+
+// AUTO-ROUTE: check Supabase session first, restore full state cross-device
+(async function() {
+  var session = await sbGetSession();
+  if (session && session.user) {
+    var uid = session.user.id;
+    var profile = await sbGetProfile(uid);
+    if (profile) {
+      var _bonus = (window.CONFIG && window.CONFIG.signup_bonus) ? window.CONFIG.signup_bonus : 2000;
+      S.supaId          = uid;
+      S.name            = profile.full_name ? profile.full_name.split(' ')[0] : session.user.email.split('@')[0];
+      S.email           = session.user.email;
+      S.balance         = profile.balance != null ? profile.balance : _bonus;
+      S.day             = profile.day || 1;
+      S.dayEarnings     = profile.day_earnings || [_bonus, 0, 0];
+      S.chats           = profile.chats || 0;
+      S.shares          = profile.shares || 0;
+      S.kycDone         = profile.kyc_done || false;
+      S.kycPending      = profile.kyc_pending || false;
+      S.hasWithdrawn    = profile.has_withdrawn || false;
+      S.tasks           = profile.tasks || { checkin:false, video:false, offer:false, dailyShare:false };
+      S.dailyShareCount = profile.daily_share_count || 0;
+      S.missedDay       = false;
+      S.lastLogin       = profile.last_login || '';
+      S.withdrawals     = profile.withdrawals || [];
+    }
+  }
+
+  if (S.email) {
+    var _b2 = (window.CONFIG && window.CONFIG.signup_bonus) ? window.CONFIG.signup_bonus : 2000;
+    var today = new Date().toDateString();
+    if (S.lastLogin && S.lastLogin !== today) {
+      var lastDate = new Date(S.lastLogin);
+      var todayDate = new Date(today);
+      var diff = Math.round((todayDate - lastDate) / 86400000);
+
+      if (diff > 1) {
+        S.balance = _b2; S.day = 1;
+        S.dayEarnings = [_b2, 0, 0];
+        S.chats = 0; S.shares = 0;
+        S.tasks = { checkin:false, video:false, offer:false, dailyShare:false };
+        S.dailyShareCount = 0; S.hasWithdrawn = false;
+        S.capWarningShown = false; S.missedDay = true; S.notifShown = false;
+      } else if (diff === 1) {
+        S.day = Math.min(3, S.day + 1);
+        S.missedDay = false;
+        S.tasks = { checkin:false, video:false, offer:false, dailyShare:false };
+        S.dailyShareCount = 0; S.capWarningShown = false; S.notifShown = false;
+      }
+      S.lastLogin = today;
+      saveState();
+      if (S.supaId && _supa) {
+        sbSaveProfile(S.supaId, {
+          balance: S.balance, day: S.day,
+          day_earnings: S.dayEarnings, chats: S.chats,
+          shares: S.shares, tasks: S.tasks,
+          daily_share_count: S.dailyShareCount,
+          last_login: S.lastLogin, missed_day: S.missedDay,
+          has_withdrawn: S.hasWithdrawn
+        }).catch(function(){});
+      }
+    }
+    updateUI();
+    pg('pg-dash');
+    setTimeout(showDayModal, 600);
+    setTimeout(startAutoNotifs, 1200);
+  }
+})();
+
+// Refresh partner list every 30s to update cooldown timer
+setInterval(function(){ if(document.getElementById('pg-dash').classList.contains('on')) renderPartners(); }, 30000);
+
+// ── CANVAS PARTICLE BACKGROUND (landing page only) ──
+(function(){
+  var canvas = document.getElementById('land-canvas');
+  if(!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var particles = [], W, H;
+  function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  for(var i=0;i<38;i++) particles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.8+0.4,dx:(Math.random()-.5)*.35,dy:(Math.random()-.5)*.35,a:Math.random()*.4+.1});
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    particles.forEach(function(p){
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,200,150,'+p.a+')'; ctx.fill();
+      p.x+=p.dx; p.y+=p.dy;
+      if(p.x<0||p.x>W)p.dx*=-1; if(p.y<0||p.y>H)p.dy*=-1;
+    });
+    for(var i=0;i<particles.length;i++) for(var j=i+1;j<particles.length;j++){
+      var dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+      var d=Math.sqrt(dx*dx+dy*dy);
+      if(d<110){ ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y); ctx.lineTo(particles[j].x,particles[j].y);
+        ctx.strokeStyle='rgba(0,200,150,'+(0.07*(1-d/110))+')'; ctx.lineWidth=.5; ctx.stroke(); }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── LIVE COUNTER — realistic drift ──
+(function(){
+  var el = document.getElementById('live-count');
+  if(!el) return;
+  var base = 4291, current = base;
+  function tick(){
+    current = Math.max(base-40, Math.min(base+220, current + Math.floor(Math.random()*5)-2));
+    el.textContent = current.toLocaleString();
+    setTimeout(tick, 3500 + Math.random()*5000);
+  }
+  setTimeout(tick, 5000);
+})();
+
+// ════════════════════════════════════════════════
+//  ADMIN PANEL — Manual Payout Management
+//  Access: tap logo 5 times on landing page
+// ════════════════════════════════════════════════
+var adminTaps = 0, adminLoggedIn = false;
+var ADMIN_PASS = 'MyTwins';
+var _admWdFilter = 'pending';
+var _admKycFilter = 'pending';
+var _admAllWd = [], _admAllKyc = [], _admAllUsers = [];
+
+// Tap logo 5x to open admin (click for desktop, touchend for mobile)
+function handleAdminTap(e){
+  if(e.type === 'touchend') e.preventDefault();
+  adminTaps++;
+  if(adminTaps >= 5){ adminTaps = 0; pg('pg-admin-login'); }
+}
+document.getElementById('hero-logo').addEventListener('click', handleAdminTap);
+document.getElementById('hero-logo').addEventListener('touchend', handleAdminTap, {passive:false});
+
+// URL HASH shortcut — earn-chat.com/#admin
+// Must run after DOM is ready so pg() works
+function checkAdminHash(){
+  if(window.location.hash === '#admin'){
+    pg('pg-admin-login');
+  }
+}
+// Run immediately and also after a short delay as fallback
+checkAdminHash();
+setTimeout(checkAdminHash, 500);
+setTimeout(checkAdminHash, 1500);
+
+window.addEventListener('hashchange', function(){
+  if(window.location.hash === '#admin') pg('pg-admin-login');
+});
+
+document.getElementById('admin-login-btn').addEventListener('click', function(){
+  var p = document.getElementById('admin-pass-input').value;
+  if(p === ADMIN_PASS){
+    adminLoggedIn = true;
+    document.getElementById('admin-pass-input').value = '';
+    document.getElementById('admin-login-err').style.display = 'none';
+    pg('pg-admin');
+    renderAdminPanel();
+  } else {
+    document.getElementById('admin-login-err').style.display = 'block';
+  }
+});
+
+document.getElementById('admin-back-btn').addEventListener('click', function(){
+  adminLoggedIn = false; pg('pg-landing');
+});
+document.getElementById('admin-login-back').addEventListener('click', function(){ pg('pg-landing'); });
+
+// ── TAB SWITCHING ──
+function switchAdminTab(tab, btn){
+  ['withdrawals','kyc','users','stats'].forEach(function(t){
+    document.getElementById('adm-tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.adm-tab').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  if(tab==='users') renderUsersTab();
+  if(tab==='stats') renderStatsTab();
+}
+
+// ── MAIN RENDER ──
+async function renderAdminPanel(){
+  if(!adminLoggedIn) return;
+
+  // Load withdrawals from Supabase
+  try {
+    var wdRes = await _supa.from('profiles')
+      .select('id,full_name,email,withdrawals,balance,kyc_done,kyc_pending,day')
+      .order('email');
+
+    _admAllUsers = wdRes.data || [];
+
+    // Flatten withdrawals from all user profiles
+    _admAllWd = [];
+    _admAllKyc = [];
+    (_admAllUsers).forEach(function(u){
+      if(u.withdrawals && u.withdrawals.length){
+        u.withdrawals.forEach(function(w){
+          _admAllWd.push(Object.assign({}, w, {
+            userName: u.full_name || u.email,
+            userEmail: u.email,
+            userId: u.id,
+            userBalance: u.balance
+          }));
+        });
+      }
+      // KYC
+      if(u.kyc_pending || u.kyc_done){
+        _admAllKyc.push({
+          userId: u.id,
+          name: u.full_name || u.email,
+          email: u.email,
+          kycDone: u.kyc_done,
+          kycPending: u.kyc_pending
+        });
+      }
+    });
+  } catch(e){
+    // Fallback: read from localStorage withdrawal queue
+    try {
+      var q = JSON.parse(localStorage.getItem('cte_wd_queue')||'[]');
+      _admAllWd = q.map(function(w){ return Object.assign({},w,{userName:w.name,userEmail:w.email}); });
+    } catch(e2){}
+  }
+
+  // Also check cte_wd_queue (local fallback)
+  try {
+    var localQ = JSON.parse(localStorage.getItem('cte_wd_queue')||'[]');
+    localQ.forEach(function(lw){
+      var exists = _admAllWd.find(function(w){ return w.id===lw.id; });
+      if(!exists) _admAllWd.push(Object.assign({},lw,{userName:lw.name,userEmail:lw.email}));
+    });
+  } catch(e){}
+
+  // Update stats
+  var pending  = _admAllWd.filter(function(w){ return w.status==='pending'; });
+  var approved = _admAllWd.filter(function(w){ return w.status==='approved'; });
+  var rejected = _admAllWd.filter(function(w){ return w.status==='rejected'; });
+  var pendingKyc = _admAllKyc.filter(function(k){ return k.kycPending && !k.kycDone; });
+  var totalPending = pending.reduce(function(s,w){ return s+(w.amount||0); },0);
+
+  document.getElementById('adm-stat-pending').textContent  = pending.length;
+  document.getElementById('adm-stat-amount').textContent   = '₦'+totalPending.toLocaleString();
+  document.getElementById('adm-stat-users').textContent    = _admAllUsers.length;
+  document.getElementById('adm-stat-kyc').textContent      = pendingKyc.length;
+
+  renderWdTab();
+  renderKycTab();
+}
+
+// ── WITHDRAWALS TAB ──
+function renderWdTab(){
+  var filtered = _admWdFilter==='all' ? _admAllWd
+    : _admAllWd.filter(function(w){ return w.status===_admWdFilter; });
+  var el = document.getElementById('adm-wd-list');
+  if(!filtered.length){
+    el.innerHTML='<div class="adm-empty">No '+_admWdFilter+' withdrawals.</div>';return;
+  }
+  el.innerHTML = filtered.slice().reverse().map(function(w){
+    var badge = w.status==='approved'
+      ? '<span class="adm-badge adm-badge-approved">✅ Approved</span>'
+      : w.status==='rejected'
+      ? '<span class="adm-badge adm-badge-rejected">❌ Rejected</span>'
+      : '<span class="adm-badge adm-badge-pending">⏳ Pending</span>';
+    var actions = w.status==='pending'
+      ? '<button class="adm-btn-approve" onclick="adminApproveWd(\''+w.id+'\')">✅ Approve</button>'
+        +'<button class="adm-btn-reject" onclick="adminRejectWd(\''+w.id+'\')">❌ Reject</button>'
+      : '';
+    return '<div class="adm-card">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">'
+      +'<div><div class="adm-card-name">'+( w.userName||'Unknown')+'</div>'
+      +'<div class="adm-card-sub">'+(w.userEmail||'')+'</div></div>'+badge+'</div>'
+      +'<div class="adm-amount">₦'+(w.amount||0).toLocaleString()+'</div>'
+      +'<div class="adm-card-grid">'
+      +'<div class="adm-card-cell">🏦 Bank<strong>'+(w.bank||'—')+'</strong></div>'
+      +'<div class="adm-card-cell">💳 Account<strong>'+(w.account||w.accountNumber||'—')+'</strong></div>'
+      +'<div class="adm-card-cell">👤 Acct Name<strong>'+(w.accountName||'—')+'</strong></div>'
+      +'<div class="adm-card-cell">📅 Date<strong>'+(w.requestedAt||w.createdAt||'—')+'</strong></div>'
+      +'<div class="adm-card-cell">🔑 ID<strong style="font-size:10px;">'+(w.id||'—')+'</strong></div>'
+      +'</div>'
+      +(actions?'<div style="margin-top:4px;">'+actions+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+function filterWd(status, btn){
+  _admWdFilter = status;
+  document.querySelectorAll('.adm-filter').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderWdTab();
+}
+
+// ── KYC TAB ──
+function renderKycTab(){
+  var filtered = _admKycFilter==='all' ? _admAllKyc
+    : _admKycFilter==='pending'
+    ? _admAllKyc.filter(function(k){ return k.kycPending && !k.kycDone; })
+    : _admAllKyc.filter(function(k){ return k.kycDone; });
+  var el = document.getElementById('adm-kyc-list');
+  if(!filtered.length){
+    el.innerHTML='<div class="adm-empty">No '+_admKycFilter+' KYC records.</div>';return;
+  }
+  el.innerHTML = filtered.map(function(k){
+    var badge = k.kycDone
+      ? '<span class="adm-badge adm-badge-approved">✅ Verified</span>'
+      : '<span class="adm-badge adm-badge-pending">⏳ Pending</span>';
+    var btn = !k.kycDone
+      ? '<button class="adm-btn-approve" onclick="adminApproveKyc(\''+k.userId+'\',\''+k.email+'\')">✅ Approve KYC</button>'
+      : '';
+    return '<div class="adm-card">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+      +'<div><div class="adm-card-name">'+k.name+'</div>'
+      +'<div class="adm-card-sub">'+k.email+'</div></div>'+badge+'</div>'
+      +(btn?'<div>'+btn+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+function filterKyc(status, btn){
+  _admKycFilter = status;
+  document.querySelectorAll('#adm-tab-kyc .adm-filter').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderKycTab();
+}
+
+// ── USERS TAB ──
+function renderUsersTab(){
+  renderUsersListFiltered('');
+}
+
+function searchUsers(){
+  var q = document.getElementById('adm-user-search').value.toLowerCase();
+  renderUsersListFiltered(q);
+}
+
+function renderUsersListFiltered(q){
+  var el = document.getElementById('adm-users-list');
+  var list = q ? _admAllUsers.filter(function(u){
+    return (u.full_name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q);
+  }) : _admAllUsers;
+  if(!list.length){ el.innerHTML='<div class="adm-empty">No users found.</div>'; return; }
+  el.innerHTML = list.map(function(u){
+    var wdCount = (u.withdrawals||[]).length;
+    var kycBadge = u.kyc_done
+      ? '<span class="adm-badge adm-badge-approved">KYC ✅</span>'
+      : u.kyc_pending
+      ? '<span class="adm-badge adm-badge-pending">KYC ⏳</span>'
+      : '<span class="adm-badge" style="background:#1F2E28;color:#7A9E90;">No KYC</span>';
+    return '<div class="adm-card">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">'
+      +'<div><div class="adm-card-name">'+(u.full_name||'Unknown')+'</div>'
+      +'<div class="adm-card-sub">'+(u.email||'')+'</div></div>'+kycBadge+'</div>'
+      +'<div class="adm-card-grid">'
+      +'<div class="adm-card-cell">💰 Balance<strong style="color:#00C896;">₦'+(u.balance||0).toLocaleString()+'</strong></div>'
+      +'<div class="adm-card-cell">📅 Day<strong>Day '+(u.day||1)+' of 3</strong></div>'
+      +'<div class="adm-card-cell">💸 Withdrawals<strong>'+wdCount+' request'+(wdCount!==1?'s':'')+'</strong></div>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+// ── STATS TAB ──
+function renderStatsTab(){
+  var el = document.getElementById('adm-stats-content');
+  var total = _admAllUsers.length;
+  var totalBal = _admAllUsers.reduce(function(s,u){ return s+(u.balance||0); },0);
+  var kycVerified = _admAllUsers.filter(function(u){ return u.kyc_done; }).length;
+  var approved = _admAllWd.filter(function(w){ return w.status==='approved'; });
+  var totalPaid = approved.reduce(function(s,w){ return s+(w.amount||0); },0);
+  var day3 = _admAllUsers.filter(function(u){ return (u.day||1)>=3; }).length;
+
+  el.innerHTML = [
+    {label:'Total Registered Users', val: total, icon:'👥'},
+    {label:'Total Balances (all users)', val: '₦'+totalBal.toLocaleString(), icon:'💰'},
+    {label:'KYC Verified Users', val: kycVerified, icon:'🪪'},
+    {label:'Total Paid Out', val: '₦'+totalPaid.toLocaleString(), icon:'💸'},
+    {label:'Users on Day 3', val: day3, icon:'📅'},
+    {label:'Total Withdrawal Requests', val: _admAllWd.length, icon:'📋'},
+  ].map(function(s){
+    return '<div class="adm-card" style="display:flex;align-items:center;justify-content:space-between;">'
+      +'<div style="font-size:13px;color:#7A9E90;">'+s.icon+' '+s.label+'</div>'
+      +'<div style="font-family:\'Space Grotesk\',sans-serif;font-size:18px;font-weight:700;color:#E8F5F0;">'+s.val+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+// ── ACTIONS ──
+async function adminApproveWd(id){
+  if(!confirm('Mark this withdrawal as APPROVED? Pay user manually then confirm.')) return;
+  // Update in localStorage queue
+  try {
+    var q = JSON.parse(localStorage.getItem('cte_wd_queue')||'[]');
+    var req = q.find(function(r){ return r.id===id; });
+    if(req) req.status = 'approved';
+    localStorage.setItem('cte_wd_queue', JSON.stringify(q));
+  } catch(e){}
+  // Update in Supabase profiles
+  if(_supa){
+    var wd = _admAllWd.find(function(w){ return w.id===id; });
+    if(wd && wd.userId){
+      var profile = await _supa.from('profiles').select('withdrawals,has_withdrawn').eq('id',wd.userId).single();
+      if(profile.data){
+        var wds = profile.data.withdrawals || [];
+        var idx = wds.findIndex(function(w){ return w.id===id; });
+        if(idx>-1) wds[idx].status = 'approved';
+        await _supa.from('profiles').update({ withdrawals: wds, has_withdrawn: true }).eq('id', wd.userId);
+      }
+    }
+  }
+  // Update local state if this is the current user
+  var localWd = S.withdrawals && S.withdrawals.find(function(w){ return w.id===id; });
+  if(localWd){ localWd.status='approved'; S.hasWithdrawn=true; saveState(); }
+  toast('✅ Approved! Pay user manually via bank app.');
+  renderAdminPanel();
+}
+
+async function adminRejectWd(id){
+  if(!confirm('REJECT this withdrawal? The balance will be refunded to the user.')) return;
+  try {
+    var q = JSON.parse(localStorage.getItem('cte_wd_queue')||'[]');
+    var req = q.find(function(r){ return r.id===id; });
+    if(req) req.status = 'rejected';
+    localStorage.setItem('cte_wd_queue', JSON.stringify(q));
+  } catch(e){}
+  if(_supa){
+    var wd = _admAllWd.find(function(w){ return w.id===id; });
+    if(wd && wd.userId){
+      var profile = await _supa.from('profiles').select('withdrawals,balance').eq('id',wd.userId).single();
+      if(profile.data){
+        var wds = profile.data.withdrawals || [];
+        var idx = wds.findIndex(function(w){ return w.id===id; });
+        if(idx>-1 && wds[idx].status!=='rejected'){
+          wds[idx].status = 'rejected';
+          var refundBal = (profile.data.balance||0) + (wd.amount||0);
+          await _supa.from('profiles').update({ withdrawals: wds, balance: refundBal }).eq('id', wd.userId);
+        }
+      }
+    }
+  }
+  var localWd = S.withdrawals && S.withdrawals.find(function(w){ return w.id===id; });
+  if(localWd && localWd.status!=='rejected'){ localWd.status='rejected'; S.balance += localWd.amount; saveState(); updateUI(); }
+  toast('❌ Rejected. Balance refunded to user.');
+  renderAdminPanel();
+}
+
+async function adminApproveKyc(userId, email){
+  if(!confirm('Approve KYC for '+email+'?')) return;
+  if(_supa && userId){
+    await _supa.from('profiles').update({ kyc_done: true, kyc_pending: false }).eq('id', userId);
+  }
+  // Also update current device's state if same user
+  if(S.email === email){
+    S.kycDone = true; S.kycPending = false;
+    saveState(); updateUI(); showKycVerified();
+  }
+  toast('✅ KYC approved for '+email);
+  renderAdminPanel();
+}
+</script>
+</body>
+</html>
