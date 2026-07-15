@@ -1,5 +1,5 @@
 /*
- ChatEarn V4.0.1 Admin Performance Patch
+ ChatEarn V4.0.2 Admin Performance Patch
  Add this script AFTER the existing ChatEarn V3.2 scripts and before </body>.
  Requires chatearn_v4_phase1.sql to be installed first.
  Public-site screens and marketing copy are untouched.
@@ -8,7 +8,22 @@
   'use strict';
 
   if (window.__CE_V4_ADMIN_PATCH__) return;
-  window.__CE_V4_ADMIN_PATCH__ = '4.0.1';
+  window.__CE_V4_ADMIN_PATCH__ = '4.0.2';
+
+  // V3 keeps its admin client private inside an IIFE, so V4 creates its own
+  // isolated client using the same admin-session storage key.
+  const v4AdminClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      storageKey: 'chatearn-admin-v3-auth'
+    }
+  });
+  window.ceAdminClient = v4AdminClient;
+
+  const MIN_SILENT_BOOTSTRAP_MS = 15000;
+  let lastBootstrapAt = 0;
 
   const SECTION_MAP = {
     funnel: ['analytics'],
@@ -47,10 +62,10 @@
   const safeArray = value => Array.isArray(value) ? value : [];
 
   async function rpcWithAuth(name, args) {
-    let response = await ceAdminClient.rpc(name, args || {});
+    let response = await v4AdminClient.rpc(name, args || {});
     if (response.error && /jwt|auth|session/i.test(response.error.message || '')) {
-      await ceAdminClient.auth.refreshSession();
-      response = await ceAdminClient.rpc(name, args || {});
+      await v4AdminClient.auth.refreshSession();
+      response = await v4AdminClient.rpc(name, args || {});
     }
     if (response.error) throw response.error;
     return parsePayload(response.data);
@@ -109,8 +124,9 @@
     }
   }
 
-  async function loadBootstrap({silent = false} = {}) {
+  async function loadBootstrap({silent = false, force = false} = {}) {
     if (bootstrapInFlight) return bootstrapInFlight;
+    if (silent && !force && Date.now() - lastBootstrapAt < MIN_SILENT_BOOTSTRAP_MS) return;
 
     bootstrapInFlight = (async () => {
       const button = document.getElementById('adminRefreshBtn');
@@ -122,6 +138,7 @@
       try {
         const payload = await rpcWithAuth('chatearn_v4_admin_bootstrap');
         if (!payload?.ok || !payload?.data) throw new Error('Invalid V4 bootstrap response');
+        lastBootstrapAt = Date.now();
 
         ensureAdminShape();
         const data = payload.data;
@@ -204,7 +221,7 @@
   }
 
   // Replace the expensive all-data refresh with the small bootstrap.
-  window.refreshAdmin = options => loadBootstrap(options || {});
+  window.refreshAdmin = options => loadBootstrap({...(options || {}), force: !(options && options.silent)});
 
   // Keep the original tab UI, then load only the selected section's data.
   // The production app exposes adminSwitchTab globally while setAdminTab is
@@ -233,7 +250,7 @@
       button.textContent = status === 'approved' ? 'Approving…' : 'Rejecting…';
     }
     try {
-      const { error } = await ceAdminClient.rpc('chatearn_v3_admin_review_withdrawal', {
+      const { error } = await v4AdminClient.rpc('chatearn_v3_admin_review_withdrawal', {
         p_withdrawal_id: id,
         p_status: status,
         p_note: note || null
@@ -262,7 +279,7 @@
       button.textContent = status === 'approved' ? 'Approving…' : 'Rejecting…';
     }
     try {
-      const { error } = await ceAdminClient.rpc('chatearn_v3_admin_review_kyc', {
+      const { error } = await v4AdminClient.rpc('chatearn_v3_admin_review_kyc', {
         p_kyc_id: id,
         p_status: status,
         p_note: note || null
@@ -289,6 +306,29 @@
     loaded.clear();
   };
 
+  // Reduce browser work: the legacy clock re-rendered Overview and Live every
+  // few seconds even when no data changed. V4 updates only the status text.
+  window.updateAdminLiveClock = function() {
+    const element = document.getElementById('adminAutoRefreshText');
+    if (!element) return;
+    const realtimeText = adminRealtimeReady
+      ? (adminLastRealtimeAt ? `Realtime event ${ago(adminLastRealtimeAt)}` : 'Realtime connected')
+      : 'Realtime connecting';
+    element.textContent = `${realtimeText} · lightweight backup refresh`;
+  };
+
+  window.startAdminLiveLoop = function() {
+    stopAdminLiveLoop();
+    adminNextPollAt = Date.now() + 120000;
+    updateAdminLiveClock();
+    adminPollHandle = setInterval(() => {
+      if (!adminPanelIsOpen() || document.hidden) return;
+      adminNextPollAt = Date.now() + 120000;
+      loadBootstrap({silent: true}).catch(() => {});
+    }, 120000);
+    adminTickerHandle = setInterval(updateAdminLiveClock, 5000);
+  };
+
   // Refresh bootstrap only while the admin is open and visible.
   setInterval(() => {
     if (
@@ -298,7 +338,7 @@
     ) {
       loadBootstrap({silent: true}).catch(() => {});
     }
-  }, 30000);
+  }, 60000);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' &&
