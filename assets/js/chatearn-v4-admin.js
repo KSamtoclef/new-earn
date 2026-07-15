@@ -1,5 +1,5 @@
 /*
- ChatEarn V4.0 Admin Performance Patch
+ ChatEarn V4.0.1 Admin Performance Patch
  Add this script AFTER the existing ChatEarn V3.2 scripts and before </body>.
  Requires chatearn_v4_phase1.sql to be installed first.
  Public-site screens and marketing copy are untouched.
@@ -8,7 +8,7 @@
   'use strict';
 
   if (window.__CE_V4_ADMIN_PATCH__) return;
-  window.__CE_V4_ADMIN_PATCH__ = true;
+  window.__CE_V4_ADMIN_PATCH__ = '4.0.1';
 
   const SECTION_MAP = {
     funnel: ['analytics'],
@@ -17,6 +17,7 @@
     shares: ['analytics', 'shares', 'referrals'],
     offers: ['offers'],
     push: ['analytics'],
+    propush: ['analytics'],
     activity: ['activity'],
     withdrawals: ['withdrawals', 'users'],
     kyc: ['kyc', 'users'],
@@ -93,7 +94,10 @@
       case 'offers':
         if (typeof ceRenderOffersAdmin === 'function') ceRenderOffersAdmin();
         break;
-      case 'push': renderPush(); break;
+      case 'push':
+      case 'propush':
+        renderPush();
+        break;
       case 'activity': renderActivity(); break;
       case 'withdrawals': renderWithdrawals(); break;
       case 'kyc': renderKyc(); break;
@@ -203,17 +207,21 @@
   window.refreshAdmin = options => loadBootstrap(options || {});
 
   // Keep the original tab UI, then load only the selected section's data.
-  const originalSetAdminTab = window.setAdminTab;
-  if (typeof originalSetAdminTab === 'function') {
-    window.setAdminTab = function(section, element) {
-      originalSetAdminTab(section, element);
+  // The production app exposes adminSwitchTab globally while setAdminTab is
+  // private, so hook adminSwitchTab directly. This also works for the Offers
+  // tab that V3 creates dynamically.
+  const originalAdminSwitchTab = window.adminSwitchTab;
+  if (typeof originalAdminSwitchTab === 'function') {
+    window.adminSwitchTab = function(event, section, element) {
+      const result = originalAdminSwitchTab(event, section, element);
       queueMicrotask(() => loadTab(section));
+      return result;
     };
   } else {
     document.addEventListener('click', event => {
       const tab = event.target.closest('.admin-tab[data-tab]');
       if (tab) loadTab(tab.dataset.tab);
-    });
+    }, true);
   }
 
   // Correctly use the isolated admin client and V3 review RPCs.
