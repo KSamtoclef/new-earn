@@ -8,9 +8,6 @@
   const ceAdminClient=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
     auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'chatearn-admin-v3-auth'}
   });
-  // Expose the isolated admin client for V4 extensions and Safari/iOS.
-  // This keeps one shared admin session across all modular scripts.
-  window.ceAdminClient=ceAdminClient;
   let ceVisitInfo={visit_number:1,is_returning:false,last_visit_at:null};
   let ceCurrentOffer=null;
   let ceOfferOpenState=null;
@@ -18,6 +15,7 @@
   let ceLastShareOpenAt=0;
   let ceLastShareStep=0;
   let ceAdminChannelsV3=[];
+  let ceVisitPromise=null,ceVisitLoadedAt=0;
   const ceOfferImpressions=new Set();
   const ceConversationMemory={};
 
@@ -27,8 +25,10 @@
   const ceIdentity=()=>currentUser?.id||VISITOR_ID;
   const ceProfileRef=()=>currentProfile?.referral_code||currentUser?.id||'';
 
-  async function ceRegisterVisit(){
-    try{
+  async function ceRegisterVisit(force=false){
+    if(!force&&ceVisitPromise)return ceVisitPromise;
+    if(!force&&Date.now()-ceVisitLoadedAt<10000)return ceVisitInfo;
+    ceVisitPromise=(async()=>{try{
       const d=deviceInfo();
       const {data,error}=await supabaseClient.rpc('chatearn_v3_register_visit',{
         p_session_id:SESSION_ID,p_visitor_id:VISITOR_ID,
@@ -44,8 +44,10 @@
       }
       await ceLoadOffer('all');
       ceRenderReturnCard();
-      cePrepareOfferCards();
-    }catch(e){console.warn('Visit registration:',e?.message||e)}
+      cePrepareOfferCards();ceVisitLoadedAt=Date.now();return ceVisitInfo;
+    }catch(e){console.warn('Visit registration:',e?.message||e);return ceVisitInfo}
+    finally{ceVisitPromise=null}})();
+    return ceVisitPromise;
   }
 
   async function ceLoadOffer(placement='all'){
@@ -309,7 +311,7 @@
   window.goScreen=function(id){const r=ceOldGoScreen(id);ceUpdateJourney();document.getElementById('ceStickyStart')?.classList.toggle('show',id==='landing'&&scrollY>260);if(id==='dashboard'){ceRenderReturnCard();ceLoadWithdrawalStatus();cePrepareOfferCards()}if(id==='sharewall')ceTrackShare('page_reached',swShares);if(id==='kyc')ceAlignDynamicAmounts();return r};
 
   const ceOldLoadProfile=window.loadProfile;
-  window.loadProfile=async function(){const r=await ceOldLoadProfile();await ceRegisterVisit();ceRenderReturnCard();ceLoadWithdrawalStatus();return r};
+  window.loadProfile=async function(...args){const r=await ceOldLoadProfile(...args);ceRegisterVisit(false);ceRenderReturnCard();ceLoadWithdrawalStatus();return r};
 
   const ceOldRenderCards=window.renderConversationCards;
   window.renderConversationCards=async function(){const r=await ceOldRenderCards();ceEnhancePartnerCards();return r};
