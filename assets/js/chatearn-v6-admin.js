@@ -1,4 +1,4 @@
-/* ChatEarn V6.1 — standalone operational admin */
+/* ChatEarn V6.1.1 — standalone operational admin */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_V6_1_ADMIN__) return;
@@ -78,8 +78,34 @@
     return ['Needs data','weak'];
   }
 
+  function removeLegacyAdminUI() {
+    const tabs = $('adminTabs');
+    if (tabs) {
+      tabs.querySelectorAll(':scope > button').forEach(button => {
+        if (!button.hasAttribute('data-ce6-tab')) button.remove();
+      });
+    }
+    const content = $('adminContent');
+    if (content) {
+      content.querySelectorAll(':scope > .admin-panel').forEach(section => {
+        if (!section.id.startsWith('ce6-')) section.remove();
+      });
+    }
+  }
+
+  function guardAdminDOM() {
+    const tabs = $('adminTabs');
+    const content = $('adminContent');
+    if (!tabs || !content || window.__CE6_DOM_GUARD__) return;
+    window.__CE6_DOM_GUARD__ = true;
+    const observer = new MutationObserver(() => removeLegacyAdminUI());
+    observer.observe(tabs, { childList: true });
+    observer.observe(content, { childList: true });
+    removeLegacyAdminUI();
+  }
+
   function buildShell() {
-    if (state.shellReady) return true;
+    if (state.shellReady) { removeLegacyAdminUI(); return true; }
     const tabs = $('adminTabs');
     const content = $('adminContent');
     if (!tabs || !content) return false;
@@ -104,6 +130,8 @@
     content.addEventListener('change', handleChange);
     content.addEventListener('submit', handleSubmit);
     state.shellReady = true;
+    guardAdminDOM();
+    removeLegacyAdminUI();
     return true;
   }
 
@@ -480,7 +508,7 @@
 
   function init() {
     const version=document.querySelector('.admin-brand small');
-    if(version)version.textContent='v6.1';
+    if(version)version.textContent='v6.1.1';
     if(location.hash==='#admin') setTimeout(window.openAdmin,100);
     window.addEventListener('hashchange',()=>{if(location.hash==='#admin')window.openAdmin();});
   }
