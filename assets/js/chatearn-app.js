@@ -11,6 +11,11 @@ let checkinStreak=0,lastCheckinDate="",screenEnteredAt=Date.now(),adminData={eve
 const ADMIN_POLL_MS=60000;
 let pendingMessageQueue=[];
 let lastPartnerMessage='',currentPartnerTurn=0,presenceInFlight=false,presenceLastSuccessAt=0,presenceLastErrorAt=0;
+let presenceScheduleTimer=null,profileLoadPromise=null,profileLoadedAt=0,threadsLoadPromise=null,threadsLoadedAt=0,threadsCache=[];
+const PROFILE_CACHE_MS=15000,THREAD_CACHE_MS=12000;
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const deferWork=(fn,delay=0)=>{const run=()=>{try{fn()}catch(e){console.debug('deferred work',e?.message||e)}};if(delay)return setTimeout(run,delay);if('requestIdleCallback'in window)return requestIdleCallback(run,{timeout:1200});return setTimeout(run,0)};
+function schedulePresence(delay=500,visibleOverride){clearTimeout(presenceScheduleTimer);presenceScheduleTimer=setTimeout(()=>updatePresence(visibleOverride),delay)}
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const money=n=>'₦'+Number(n||0).toLocaleString('en-NG');
@@ -31,23 +36,19 @@ async function updatePresence(visibleOverride){
     if(Date.now()-presenceLastErrorAt>300000){presenceLastErrorAt=Date.now();trackEvent('presence_heartbeat_failed',{message:e?.message||String(e)});}
   }finally{presenceInFlight=false}
 }
-setInterval(()=>updatePresence(),10000);
-document.addEventListener('visibilitychange',()=>{updatePresence(document.visibilityState!=='hidden');if(!document.hidden)flushPendingMessages()});
-window.addEventListener('focus',()=>updatePresence(true));
-window.addEventListener('pageshow',()=>updatePresence(document.visibilityState!=='hidden'));
+setInterval(()=>{if(!document.hidden)updatePresence(true)},15000);
+document.addEventListener('visibilitychange',()=>{schedulePresence(document.hidden?0:350,document.visibilityState!=='hidden');if(!document.hidden)flushPendingMessages()});
+window.addEventListener('focus',()=>schedulePresence(350,true));
+window.addEventListener('pageshow',()=>schedulePresence(450,document.visibilityState!=='hidden'));
 window.addEventListener('pagehide',()=>updatePresence(false));
-window.addEventListener('online',()=>{document.getElementById('offlineStrip')?.classList.remove('show');flushPendingMessages();updatePresence(true)});
+window.addEventListener('online',()=>{document.getElementById('offlineStrip')?.classList.remove('show');flushPendingMessages();schedulePresence(300,true)});
 window.addEventListener('offline',()=>document.getElementById('offlineStrip')?.classList.add('show'));
-supabaseClient.auth.onAuthStateChange(()=>setTimeout(()=>updatePresence(document.visibilityState!=='hidden'),0));
-function startPresenceHeartbeat(){
-  updatePresence(document.visibilityState!=='hidden');
-  setTimeout(()=>updatePresence(document.visibilityState!=='hidden'),1500);
-  setTimeout(()=>updatePresence(document.visibilityState!=='hidden'),5000);
-}
+supabaseClient.auth.onAuthStateChange(()=>schedulePresence(1200,document.visibilityState!=='hidden'));
+function startPresenceHeartbeat(){schedulePresence(1200,document.visibilityState!=='hidden')}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startPresenceHeartbeat,{once:true});else startPresenceHeartbeat();
 window.addEventListener('error',e=>trackEvent('js_error',{message:e.message,source:e.filename,line:e.lineno}));window.addEventListener('unhandledrejection',e=>trackEvent('js_error',{message:String(e.reason?.message||e.reason||'promise rejection')}));
 
-function goScreen(id){const previous=currentScreen;if(previous&&previous!==id)trackEvent('page_exit',{page:previous,duration_seconds:Math.round((Date.now()-screenEnteredAt)/1000),next_page:id});document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.style.display='none'});const target=document.getElementById(id);if(!target)return;target.classList.add('active');if(['loading','processing'].includes(id)){Object.assign(target.style,{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'})}else target.style.display='block';currentScreen=id;screenEnteredAt=Date.now();window.scrollTo({top:0,behavior:'smooth'});trackEvent('page_view',{page:id});updatePresence();if(id==='dashboard')renderConversationCards();if(id==='earnings')trackEvent('earnings_opened');if(id==='withdraw')trackEvent('withdrawal_opened');if(id==='sharewall')trackEvent('share_page_reached');if(id==='kyc')trackEvent('kyc_opened');}
+function goScreen(id){const previous=currentScreen;if(previous&&previous!==id)trackEvent('page_exit',{page:previous,duration_seconds:Math.round((Date.now()-screenEnteredAt)/1000),next_page:id});document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.style.display='none'});const target=document.getElementById(id);if(!target)return;target.classList.add('active');if(['loading','processing'].includes(id)){Object.assign(target.style,{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'})}else target.style.display='block';currentScreen=id;screenEnteredAt=Date.now();window.scrollTo({top:0,behavior:'smooth'});trackEvent('page_view',{page:id});schedulePresence(450);if(id==='dashboard')void renderConversationCards();if(id==='earnings')trackEvent('earnings_opened');if(id==='withdraw')trackEvent('withdrawal_opened');if(id==='sharewall')trackEvent('share_page_reached');if(id==='kyc')trackEvent('kyc_opened');}
 
 (function(){history.pushState(null,'',location.href);history.pushState(null,'',location.href);window.addEventListener('popstate',function(){history.pushState(null,'',location.href);if(currentScreen==='landing'||currentScreen==='register'){window.location.href=BACK}else showBackWarn()})})();
 document.addEventListener('contextmenu',e=>e.preventDefault());
@@ -107,18 +108,115 @@ function getNextReply(userText){
   return `${bridge} ${followUp}`.replace(/\s+/g,' ').trim();
 }
 
-async function doRegister(){const name=document.getElementById('regName').value.trim(),email=document.getElementById('regEmail').value.trim(),pass=document.getElementById('regPass').value;const btn=document.getElementById('regSubmitBtn');if(!name)return showToast('⚠️ Enter your full name');if(!/^\S+@\S+\.\S+$/.test(email))return showToast('⚠️ Enter a valid email');if(pass.length<6)return showToast('⚠️ Password must be at least 6 characters');btn.disabled=true;btn.textContent='Creating account…';trackEvent('registration_attempt',{email_domain:email.split('@')[1]||''});try{let {data,error}=await supabaseClient.auth.signUp({email,password:pass,options:{data:{full_name:name}}});if(error)throw error;if(!data.session){const login=await supabaseClient.auth.signInWithPassword({email,password:pass});if(login.error)throw new Error('Account created, but automatic login is unavailable. Turn off email confirmation in Supabase Auth settings.');data=login.data}currentUser=data.user;await loadProfile();userName=(currentProfile?.full_name||name).split(' ')[0];trackEvent('registration_success');goScreen('loading');runLoadingSequence()}catch(e){trackEvent('registration_error',{message:e.message});showToast('⚠️ '+e.message);btn.disabled=false;btn.textContent='Create Account & Get ₦10,000 →'}}
-function openLogin(){document.getElementById('loginModal').classList.add('show');trackEvent('login_opened')}function closeLogin(){document.getElementById('loginModal').classList.remove('show')}async function doLogin(){const email=document.getElementById('loginEmail').value.trim(),password=document.getElementById('loginPass').value,btn=document.getElementById('loginBtn'),errEl=document.getElementById('loginError');errEl.classList.remove('show');btn.disabled=true;btn.textContent='Logging in…';const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});if(error){errEl.textContent=error.message;errEl.classList.add('show');btn.disabled=false;btn.textContent='Log In & Continue →';trackEvent('login_error',{message:error.message});return}currentUser=data.user;await loadProfile();closeLogin();goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';updateBalance();renderConversationCards();runDailyCheckin();trackEvent('login_success');btn.disabled=false;btn.textContent='Log In & Continue →'}
+async function doRegister(){
+  const name=document.getElementById('regName').value.trim(),email=document.getElementById('regEmail').value.trim(),pass=document.getElementById('regPass').value,btn=document.getElementById('regSubmitBtn');
+  if(!name)return showToast('⚠️ Enter your full name');
+  if(!/^\S+@\S+\.\S+$/.test(email))return showToast('⚠️ Enter a valid email');
+  if(pass.length<6)return showToast('⚠️ Password must be at least 6 characters');
+  btn.disabled=true;btn.textContent='Creating account…';
+  trackEvent('registration_attempt',{email_domain:email.split('@')[1]||''});
+  try{
+    let {data,error}=await supabaseClient.auth.signUp({email,password:pass,options:{data:{full_name:name}}});
+    if(error)throw error;
+    if(!data.session){
+      const login=await supabaseClient.auth.signInWithPassword({email,password:pass});
+      if(login.error)throw new Error('Account created, but automatic login is unavailable. Turn off email confirmation in Supabase Auth settings.');
+      data=login.data;
+    }
+    currentUser=data.user;
+    userName=(data.user?.user_metadata?.full_name||name).split(' ')[0];
+    document.getElementById('dashName').textContent=userName+'!';
+    goScreen('loading');
+    const profilePromise=loadProfile({force:true,retries:4}).catch(error=>{console.warn('Profile setup:',error?.message||error);return null});
+    runLoadingSequence(profilePromise);
+    trackEvent('registration_success');
+  }catch(e){
+    trackEvent('registration_error',{message:e.message});
+    showToast('⚠️ '+e.message);
+    if(currentScreen==='loading')goScreen('register');
+    btn.disabled=false;btn.textContent='Create Account & Get ₦10,000 →';
+  }
+}
+function openLogin(){document.getElementById('loginModal').classList.add('show');trackEvent('login_opened')}
+function closeLogin(){document.getElementById('loginModal').classList.remove('show')}
+async function doLogin(){
+  const email=document.getElementById('loginEmail').value.trim(),password=document.getElementById('loginPass').value,btn=document.getElementById('loginBtn'),errEl=document.getElementById('loginError');
+  errEl.classList.remove('show');
+  if(!/^\S+@\S+\.\S+$/.test(email)){errEl.textContent='Enter a valid email address.';errEl.classList.add('show');return}
+  if(!password){errEl.textContent='Enter your password.';errEl.classList.add('show');return}
+  btn.disabled=true;btn.textContent='Logging in…';
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    currentUser=data.user;
+    userName=(data.user?.user_metadata?.full_name||email.split('@')[0]||'User').split(' ')[0];
+    closeLogin();
+    const balanceEl=document.getElementById('dashBalance');if(balanceEl)balanceEl.textContent='Loading…';
+    document.getElementById('dashName').textContent=userName+'!';
+    goScreen('dashboard');
+    const profilePromise=loadProfile({force:true,retries:1});
+    profilePromise.then(()=>{document.getElementById('dashName').textContent=userName+'!';updateBalance()}).catch(error=>{console.warn('Profile load:',error?.message||error);showToast('Logged in. Account details are still syncing.')});
+    deferWork(()=>runDailyCheckin(),350);
+    trackEvent('login_success');
+  }catch(e){
+    errEl.textContent=e.message||'Unable to log in. Please try again.';
+    errEl.classList.add('show');
+    trackEvent('login_error',{message:e.message});
+  }finally{
+    btn.disabled=false;btn.textContent='Log In & Continue →';
+  }
+}
 async function userLogout(){
   if(!confirm('Log out of ChatEarn on this device?'))return;
   try{await updatePresence(false);await supabaseClient.auth.signOut()}catch(e){}
-  currentUser=null;currentProfile=null;userName='';totalBalance=SIGNUP_BONUS;chatEarnings=0;replyCount=0;currentChatUser=null;lastPartnerMessage='';currentPartnerTurn=0;
+  currentUser=null;currentProfile=null;profileLoadedAt=0;threadsLoadedAt=0;threadsCache=[];userName='';totalBalance=SIGNUP_BONUS;chatEarnings=0;replyCount=0;currentChatUser=null;lastPartnerMessage='';currentPartnerTurn=0;
   document.getElementById('chatBody').innerHTML='';document.getElementById('quickReplies').innerHTML='';goScreen('landing');showToast('Logged out successfully');trackEvent('user_logged_out')
 }
-async function loadProfile(){if(!currentUser)return;const {data,error}=await supabaseClient.from('chatearn_profiles').select('*').eq('user_id',currentUser.id).single();if(error)throw error;currentProfile=data;userName=(data.full_name||currentUser.email||'User').split(' ')[0];totalBalance=Number(data.balance||SIGNUP_BONUS);replyCount=Number(data.total_messages||0);chatEarnings=Math.max(0,totalBalance-SIGNUP_BONUS);checkinStreak=Number(data.checkin_streak||0);lastCheckinDate=data.last_checkin_date||'';updateBalance()}
-function runLoadingSequence(){const steps=['ls1','ls2','ls3','ls4'],fill=document.getElementById('ldFill');let i=0;const iv=setInterval(()=>{if(i<steps.length){const s=document.getElementById(steps[i]);s.classList.add('done');s.querySelector('.ld-step-dot').textContent='✓';fill.style.width=((i+1)/steps.length*100)+'%';i++}else{clearInterval(iv);setTimeout(()=>{goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';updateBalance();trackEvent('dashboard_reached');const pickIdx=Math.floor(Math.random()*FOREIGNERS.length);setTimeout(()=>openChat(pickIdx),900)},350)}},480)}
-
-async function renderConversationCards(){const cards=[...document.querySelectorAll('.foreigner-card')];let threads=[];if(currentUser){const q=await supabaseClient.from('chatearn_chat_threads').select('*').eq('user_id',currentUser.id);threads=q.data||[]}cards.forEach((card,i)=>{const f=FOREIGNERS[i],t=threads.find(x=>x.partner_key===f.name);const body=card.querySelector('.fc-body');let p=body.querySelector('.fc-preview');if(!p){p=document.createElement('div');p.className='fc-preview';body.appendChild(p)}p.textContent=t?.last_message_preview||'Tap to start chatting';let meta=card.querySelector('.fc-meta');if(!meta){const old=card.querySelector('.fc-earn');old.style.display='none';meta=document.createElement('div');meta.className='fc-meta';meta.innerHTML='<div class="fc-time"></div><div class="fc-unread"></div><button class="fc-earn"></button>';card.appendChild(meta)}meta.querySelector('.fc-time').textContent=t?.last_message_at?ago(t.last_message_at):'';const u=meta.querySelector('.fc-unread');u.textContent=t?.unread_count||'';u.classList.toggle('show',Number(t?.unread_count||0)>0);meta.querySelector('.fc-earn').textContent='₦'+Math.round(f.rate/1000)+'K/reply'})}
+async function loadProfile(options={}){
+  if(!currentUser)return null;
+  const force=!!options.force,retries=Math.max(0,Number(options.retries||0));
+  if(!force&&currentProfile&&currentProfile.user_id===currentUser.id&&Date.now()-profileLoadedAt<PROFILE_CACHE_MS)return currentProfile;
+  if(profileLoadPromise)return profileLoadPromise;
+  profileLoadPromise=(async()=>{
+    let lastError=null;
+    for(let attempt=0;attempt<=retries;attempt++){
+      const {data,error}=await supabaseClient.from('chatearn_profiles').select('*').eq('user_id',currentUser.id).maybeSingle();
+      if(!error&&data){
+        currentProfile=data;profileLoadedAt=Date.now();
+        userName=(data.full_name||currentUser.email||'User').split(' ')[0];
+        totalBalance=Number(data.balance||SIGNUP_BONUS);replyCount=Number(data.total_messages||0);chatEarnings=Math.max(0,totalBalance-SIGNUP_BONUS);checkinStreak=Number(data.checkin_streak||0);lastCheckinDate=data.last_checkin_date||'';updateBalance();
+        return data;
+      }
+      lastError=error||new Error('Profile is still being prepared');
+      if(attempt<retries)await sleep(220+attempt*260);
+    }
+    throw lastError||new Error('Unable to load account profile');
+  })().finally(()=>{profileLoadPromise=null});
+  return profileLoadPromise;
+}
+function runLoadingSequence(profilePromise=Promise.resolve()){
+  const steps=['ls1','ls2','ls3','ls4'],fill=document.getElementById('ldFill');let i=0;
+  steps.forEach(id=>{const s=document.getElementById(id);s?.classList.remove('done');const dot=s?.querySelector('.ld-step-dot');if(dot)dot.textContent=''});if(fill)fill.style.width='0%';
+  const iv=setInterval(()=>{
+    if(i<steps.length){const s=document.getElementById(steps[i]);s?.classList.add('done');const dot=s?.querySelector('.ld-step-dot');if(dot)dot.textContent='✓';if(fill)fill.style.width=((i+1)/steps.length*100)+'%';i++;return}
+    clearInterval(iv);
+    Promise.race([Promise.resolve(profilePromise),sleep(1200)]).finally(()=>setTimeout(()=>{
+      goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';updateBalance();trackEvent('dashboard_reached');const pickIdx=Math.floor(Math.random()*FOREIGNERS.length);setTimeout(()=>openChat(pickIdx),650)
+    },120));
+  },240);
+}
+async function renderConversationCards(options={}){
+  const cards=[...document.querySelectorAll('.foreigner-card')];let threads=[];
+  if(currentUser){
+    const force=!!options.force;
+    if(!force&&Date.now()-threadsLoadedAt<THREAD_CACHE_MS)threads=threadsCache;
+    else{
+      if(!threadsLoadPromise)threadsLoadPromise=supabaseClient.from('chatearn_chat_threads').select('partner_key,last_message_preview,last_message_at,unread_count').eq('user_id',currentUser.id).then(q=>{if(q.error)throw q.error;threadsCache=q.data||[];threadsLoadedAt=Date.now();return threadsCache}).finally(()=>{threadsLoadPromise=null});
+      try{threads=await threadsLoadPromise}catch(e){console.warn('Conversation list:',e?.message||e);threads=threadsCache}
+    }
+  }
+  cards.forEach((card,i)=>{const f=FOREIGNERS[i],t=threads.find(x=>x.partner_key===f.name);const body=card.querySelector('.fc-body');let p=body.querySelector('.fc-preview');if(!p){p=document.createElement('div');p.className='fc-preview';body.appendChild(p)}p.textContent=t?.last_message_preview||'Tap to start chatting';let meta=card.querySelector('.fc-meta');if(!meta){const old=card.querySelector('.fc-earn');if(old)old.style.display='none';meta=document.createElement('div');meta.className='fc-meta';meta.innerHTML='<div class="fc-time"></div><div class="fc-unread"></div><button class="fc-earn"></button>';card.appendChild(meta)}meta.querySelector('.fc-time').textContent=t?.last_message_at?ago(t.last_message_at):'';const u=meta.querySelector('.fc-unread');u.textContent=t?.unread_count||'';u.classList.toggle('show',Number(t?.unread_count||0)>0);meta.querySelector('.fc-earn').textContent='₦'+Math.round(f.rate/1000)+'K/reply'});
+}
 async function openChat(idx){
   currentChatUser=FOREIGNERS[idx];lastPartnerMessage='';currentPartnerTurn=0;
   document.getElementById('chatAv').innerHTML=`<div style="width:40px;height:40px;border-radius:50%;background:${currentChatUser.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#000;position:relative;">${currentChatUser.initials}<div class="ch-online"></div></div>`;
@@ -164,8 +262,8 @@ function claimStreak(){document.getElementById('streakModal').style.display='non
 
 async function loadRealPublicActivity(){try{const {data}=await supabaseClient.rpc('chatearn_public_stats');if(data&&data.length){document.getElementById('liveCounter').textContent=money(data[0].paid_today||0);const badge=document.querySelector('.st-badge');if(badge)badge.textContent=Number(data[0].online_now||0).toLocaleString()+' Online'}}catch(e){}}
 function subscribePublicActivity(){supabaseClient.channel('ce-public').on('postgres_changes',{event:'INSERT',schema:'public',table:'chatearn_public_activity'},payload=>{const ev=payload.new;const t=document.getElementById('activityToast');document.getElementById('atAv').textContent='CE';document.getElementById('atAv').style.background='#00C853';document.getElementById('atName').textContent=ev.display_name||'ChatEarn member';document.getElementById('atAction').textContent=ev.event_type==='withdrawal_approved'?'received '+money(ev.amount||0)+' 🎉':ev.event_type==='chat_activity'?'completed a chat activity 💬':'just joined ChatEarn';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}).subscribe()}
-async function diagnosePush(source='browser_check'){let permission=typeof Notification==='undefined'?'unsupported':Notification.permission,status='none',worker=false;try{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();worker=regs.some(r=>String(r.active?.scriptURL||'').includes('/webpushr-sw.js'));for(const r of regs){if(r.pushManager){const sub=await r.pushManager.getSubscription();if(sub){status='subscribed';break}}}}}catch(e){status='error'}trackEvent('webpush_status',{source,permission,subscription:status,worker_detected:worker})}
-window.handleWebPushResult=result=>{trackEvent('webpush_loader',{result:String(result)});setTimeout(()=>diagnosePush(String(result)),1000)};
+async function diagnosePush(source='browser_check'){let permission=typeof Notification==='undefined'?'unsupported':Notification.permission,status='none',worker=false;try{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();worker=regs.some(r=>String(r.active?.scriptURL||'').includes('sw-check-permissions-3d5d7.js'));for(const r of regs){if(r.pushManager){const sub=await r.pushManager.getSubscription();if(sub){status='subscribed';break}}}}}catch(e){status='error'}trackEvent('propush_status',{source,permission,subscription:status,worker_detected:worker})}
+window.handleProPushResult=result=>{trackEvent('propush_loader',{result:String(result)});setTimeout(()=>diagnosePush(String(result)),1000)};
 
 function byId(id){return document.getElementById(id)}
 function putHtml(id,value){const el=byId(id);if(el)el.innerHTML=value}
@@ -185,9 +283,9 @@ function uniqueEvent(name,events=adminData.events){return new Set(events.filter(
 function uniqueRegistrations(events=adminData.events){return new Set(events.filter(e=>e.event_name==='registration_success').map(registrationIdentity).filter(Boolean)).size}
 function profileFor(userId){return userId?adminData.profiles.find(p=>p.user_id===userId):null}
 function eventActor(e){const p=profileFor(e?.user_id);return p?.full_name||p?.email||'Anonymous visitor'}
-const EVENT_LABELS={site_enter:'Entered the site',landing_view:'Viewed landing page',start_clicked:'Tapped Start',registration_started:'Started registration',registration_attempt:'Attempted registration',registration_success:'Completed registration',registration_error:'Registration failed',dashboard_reached:'Reached dashboard',chat_opened:'Opened a chat',chat_opening_message:'Opening message shown',user_message_sent:'Sent a chat message',partner_reply_delivered:'Received a chat reply',earnings_opened:'Opened earnings',withdrawal_opened:'Opened withdrawal',withdrawal_submitted:'Submitted withdrawal',withdrawal_approved:'Withdrawal approved',withdrawal_rejected:'Withdrawal rejected',share_page_reached:'Reached share page',whatsapp_share_opened:'Opened WhatsApp sharing',whatsapp_returned:'Returned from WhatsApp',kyc_opened:'Opened KYC',kyc_external_clicked:'Opened KYC partner link',kyc_approved:'KYC approved',kyc_rejected:'KYC rejected',processing_reached:'Reached processing page',webpush_status:'WebPush browser check',webpush_loader:'WebPush script event',page_view:'Opened a page',page_exit:'Left a page',js_error:'JavaScript error',session_restored:'Returned to account'};
+const EVENT_LABELS={site_enter:'Entered the site',landing_view:'Viewed landing page',start_clicked:'Tapped Start',registration_started:'Started registration',registration_attempt:'Attempted registration',registration_success:'Completed registration',registration_error:'Registration failed',dashboard_reached:'Reached dashboard',chat_opened:'Opened a chat',chat_opening_message:'Opening message shown',user_message_sent:'Sent a chat message',partner_reply_delivered:'Received a chat reply',earnings_opened:'Opened earnings',withdrawal_opened:'Opened withdrawal',withdrawal_submitted:'Submitted withdrawal',withdrawal_approved:'Withdrawal approved',withdrawal_rejected:'Withdrawal rejected',share_page_reached:'Reached share page',whatsapp_share_opened:'Opened WhatsApp sharing',whatsapp_returned:'Returned from WhatsApp',kyc_opened:'Opened KYC',kyc_external_clicked:'Opened KYC partner link',kyc_approved:'KYC approved',kyc_rejected:'KYC rejected',processing_reached:'Reached processing page',propush_status:'ProPush browser check',propush_loader:'ProPush script event',page_view:'Opened a page',page_exit:'Left a page',js_error:'JavaScript error',session_restored:'Returned to account'};
 function eventLabel(name){return EVENT_LABELS[name]||String(name||'activity').replaceAll('_',' ')}
-const TECHNICAL_EVENTS=new Set(['page_view','page_exit','webpush_status','webpush_loader','presence_heartbeat','session_restored']);
+const TECHNICAL_EVENTS=new Set(['page_view','page_exit','propush_status','propush_loader','presence_heartbeat','session_restored']);
 function isImportantEvent(e){return !TECHNICAL_EVENTS.has(e.event_name)&&e.event_name!=='js_error'}
 function setAdminRealtimeState(state,text){const dot=byId('adminRealtimeDot'),label=byId('adminRealtimeText');if(dot){dot.classList.remove('connecting','connected','disconnected');dot.classList.add(state)}if(label)label.textContent=text}
 function adminPanelIsOpen(){return !!(byId('adminShell')?.classList.contains('show')&&byId('adminContent')&&byId('adminContent').style.display!=='none')}
@@ -303,7 +401,7 @@ function getRecentLiveSessions(){
   });
   return [...map.values()].sort((a,b)=>new Date(b.last_seen_at)-new Date(a.last_seen_at));
 }
-function renderOverview(){const todayEvents=adminData.events.filter(eventToday),active=getRecentLiveSessions(),visibleActive=active.filter(p=>p.is_visible===true),people=new Set(active.map(p=>p.visitor_id||p.user_id||p.session_id).filter(Boolean)),visitors=new Set(todayEvents.map(eventIdentity).filter(Boolean)),sessions=new Set(todayEvents.map(e=>e.session_id).filter(Boolean)),registrations=uniqueRegistrations(todayEvents),siteEntries=countEvent('site_enter',todayEvents),pageViews=countEvent('page_view',todayEvents),pushLatest=new Map();todayEvents.filter(e=>e.event_name==='webpush_status').forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!pushLatest.has(key))pushLatest.set(key,e)});const push=[...pushLatest.values()].filter(e=>e.metadata?.subscription==='subscribed').length,pendingW=adminData.withdrawals.filter(w=>w.status==='pending').length,pendingK=adminData.kyc.filter(k=>k.status==='pending').length;putHtml('overviewKpis',kpi(people.size,'people online now')+kpi(active.length,'recent sessions now')+kpi(visibleActive.length,'visible sessions now')+kpi(visitors.size,'unique browsers today')+kpi(sessions.size,'sessions today')+kpi(siteEntries,'site entries today')+kpi(pageViews,'page views today')+kpi(registrations,'registrations today')+kpi(push,'push subscribed today')+kpi(pendingW,'pending withdrawals')+kpi(pendingK,'pending KYC')+kpi(countEvent('user_message_sent',todayEvents),'messages today')+kpi(countEvent('whatsapp_share_opened',todayEvents),'share opens today'));const meaningful=adminData.events.filter(isImportantEvent).slice(0,20);putHtml('overviewActivity',meaningful.length?meaningful.map(e=>`<div class="admin-row admin-event-important"><div class="admin-row-main"><div class="admin-row-title">${esc(eventLabel(e.event_name))}</div><div class="admin-row-sub">${esc(eventActor(e))} · ${esc(e.page||'unknown page')}${e.partner?' · '+esc(e.partner):''} · ${ago(e.created_at)}<br>${formatLagos(e.created_at)} WAT · Session ${esc((e.session_id||'').slice(0,8))}</div></div></div>`).join(''):empty('No meaningful activity recorded yet.'));const alerts=[];if(pendingW)alerts.push(`${pendingW} withdrawal request${pendingW>1?'s':''} waiting for review.`);if(pendingK)alerts.push(`${pendingK} KYC record${pendingK>1?'s':''} waiting for review.`);const errors24=adminData.events.filter(e=>e.event_name==='js_error'&&Date.now()-new Date(e.created_at).getTime()<86400000).length,errors7=countEvent('js_error');if(errors24)alerts.push(`${errors24} JavaScript error${errors24>1?'s':''} recorded in the last 24 hours.`);else if(errors7)alerts.push(`${errors7} older JavaScript error${errors7>1?'s':''} exist in the seven-day log.`);putHtml('overviewAttention',alerts.length?alerts.map(a=>`<div class="admin-row"><div class="admin-row-title">${esc(a)}</div></div>`).join(''):empty('No urgent items.'))}
+function renderOverview(){const todayEvents=adminData.events.filter(eventToday),active=getRecentLiveSessions(),visibleActive=active.filter(p=>p.is_visible===true),people=new Set(active.map(p=>p.visitor_id||p.user_id||p.session_id).filter(Boolean)),visitors=new Set(todayEvents.map(eventIdentity).filter(Boolean)),sessions=new Set(todayEvents.map(e=>e.session_id).filter(Boolean)),registrations=uniqueRegistrations(todayEvents),siteEntries=countEvent('site_enter',todayEvents),pageViews=countEvent('page_view',todayEvents),pushLatest=new Map();todayEvents.filter(e=>e.event_name==='propush_status').forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!pushLatest.has(key))pushLatest.set(key,e)});const push=[...pushLatest.values()].filter(e=>e.metadata?.subscription==='subscribed').length,pendingW=adminData.withdrawals.filter(w=>w.status==='pending').length,pendingK=adminData.kyc.filter(k=>k.status==='pending').length;putHtml('overviewKpis',kpi(people.size,'people online now')+kpi(active.length,'recent sessions now')+kpi(visibleActive.length,'visible sessions now')+kpi(visitors.size,'unique browsers today')+kpi(sessions.size,'sessions today')+kpi(siteEntries,'site entries today')+kpi(pageViews,'page views today')+kpi(registrations,'registrations today')+kpi(push,'push subscribed today')+kpi(pendingW,'pending withdrawals')+kpi(pendingK,'pending KYC')+kpi(countEvent('user_message_sent',todayEvents),'messages today')+kpi(countEvent('whatsapp_share_opened',todayEvents),'share opens today'));const meaningful=adminData.events.filter(isImportantEvent).slice(0,20);putHtml('overviewActivity',meaningful.length?meaningful.map(e=>`<div class="admin-row admin-event-important"><div class="admin-row-main"><div class="admin-row-title">${esc(eventLabel(e.event_name))}</div><div class="admin-row-sub">${esc(eventActor(e))} · ${esc(e.page||'unknown page')}${e.partner?' · '+esc(e.partner):''} · ${ago(e.created_at)}<br>${formatLagos(e.created_at)} WAT · Session ${esc((e.session_id||'').slice(0,8))}</div></div></div>`).join(''):empty('No meaningful activity recorded yet.'));const alerts=[];if(pendingW)alerts.push(`${pendingW} withdrawal request${pendingW>1?'s':''} waiting for review.`);if(pendingK)alerts.push(`${pendingK} KYC record${pendingK>1?'s':''} waiting for review.`);const errors24=adminData.events.filter(e=>e.event_name==='js_error'&&Date.now()-new Date(e.created_at).getTime()<86400000).length,errors7=countEvent('js_error');if(errors24)alerts.push(`${errors24} JavaScript error${errors24>1?'s':''} recorded in the last 24 hours.`);else if(errors7)alerts.push(`${errors7} older JavaScript error${errors7>1?'s':''} exist in the seven-day log.`);putHtml('overviewAttention',alerts.length?alerts.map(a=>`<div class="admin-row"><div class="admin-row-title">${esc(a)}</div></div>`).join(''):empty('No urgent items.'))}
 function renderLive(){
   const recent=getRecentLiveSessions(),visible=recent.filter(p=>p.is_visible===true),loggedPeople=new Set(recent.filter(p=>p.user_id).map(p=>p.user_id)),anonymousSessions=recent.filter(p=>!p.user_id),people=new Set(recent.map(p=>p.visitor_id||p.user_id||p.session_id).filter(Boolean));
   putHtml('liveKpis',kpi(people.size,'people online · last 3 min')+kpi(recent.length,'recent sessions')+kpi(visible.length,'visible sessions')+kpi(loggedPeople.size,'logged-in people')+kpi(anonymousSessions.length,'anonymous sessions')+kpi(new Set(recent.map(p=>p.page).filter(Boolean)).size,'active pages'));
@@ -313,7 +411,7 @@ function renderFunnel(){const stages=[['landing_view','Landing viewed'],['start_
 function renderPages(){const views=adminData.events.filter(e=>e.event_name==='page_view'),exits=adminData.events.filter(e=>e.event_name==='page_exit'),pages=[...new Set(views.map(e=>e.metadata?.page||e.page).filter(Boolean))];putHtml('pageKpis',kpi(views.length,'page views · 7 days')+kpi(pages.length,'pages visited')+kpi(new Set(views.map(eventIdentity)).size,'unique visitors')+kpi(exits.length,'recorded exits'));putHtml('pagesTable',pages.map(p=>{const pv=views.filter(e=>(e.metadata?.page||e.page)===p),pe=exits.filter(e=>(e.metadata?.page||e.page)===p),avg=pe.length?Math.round(pe.reduce((a,e)=>a+Number(e.metadata?.duration_seconds||0),0)/pe.length):0;return `<tr><td>${esc(p)}</td><td>${pv.length}</td><td>${new Set(pv.map(eventIdentity)).size}</td><td>${avg}s</td><td>${pe.length}</td></tr>`}).join('')||'<tr><td colspan="5">No page data</td></tr>')}
 function renderChats(){const opens=adminData.events.filter(e=>e.event_name==='chat_opened'),sent=adminData.events.filter(e=>e.event_name==='user_message_sent'),replies=adminData.events.filter(e=>e.event_name==='partner_reply_delivered');putHtml('chatKpis',kpi(opens.length,'chat opens · 7 days')+kpi(sent.length,'messages sent')+kpi(replies.length,'partner replies')+kpi(opens.length?Math.round(sent.length/opens.length*10)/10:0,'messages per open'));putHtml('chatsTable',FOREIGNERS.map(f=>{const o=opens.filter(e=>e.partner===f.name),s=sent.filter(e=>e.partner===f.name),r=replies.filter(e=>e.partner===f.name),activated=new Set(s.map(eventIdentity)).size,openers=new Set(o.map(eventIdentity)).size,drop=openers?Math.round(Math.max(0,openers-activated)/openers*100):0;return `<tr><td>${esc(f.name)}</td><td>${o.length}</td><td>${s.length}</td><td>${r.length}</td><td>${o.length?(s.length/o.length).toFixed(1):'0'}</td><td>${drop}%</td></tr>`}).join(''))}
 function renderShares(){const opens=adminData.events.filter(e=>e.event_name==='whatsapp_share_opened'),returns=adminData.events.filter(e=>e.event_name==='whatsapp_returned'),openSessions=new Set(opens.map(eventIdentity)),returnSessions=new Set(returns.map(eventIdentity));putHtml('shareKpis',kpi(opens.length,'WhatsApp opens · 7 days')+kpi(returns.length,'returns recorded')+kpi(openSessions.size?Math.round(returnSessions.size/openSessions.size*100)+'%':'0%','visitor return rate')+kpi(openSessions.size,'sharing visitors'));putHtml('shareList',returns.slice(0,50).map(e=>`<div class="admin-row"><div><div class="admin-row-title">Returned from WhatsApp · step ${esc(e.metadata?.step||'—')}</div><div class="admin-row-sub">Progress ${esc(e.metadata?.progress||0)}% · ${eventActor(e)} · ${ago(e.created_at)} · session ${esc((e.session_id||'').slice(0,8))}</div></div></div>`).join('')||empty('No share-return activity yet.'))}
-function renderPush(){const list=adminData.events.filter(e=>e.event_name==='webpush_status'),latest=new Map();list.forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!latest.has(key))latest.set(key,e)});const vals=[...latest.values()],sub=vals.filter(e=>e.metadata?.subscription==='subscribed').length,granted=vals.filter(e=>e.metadata?.permission==='granted').length,denied=vals.filter(e=>e.metadata?.permission==='denied').length,unsupported=vals.filter(e=>e.metadata?.permission==='unsupported').length;putHtml('pushKpis',kpi(vals.length,'unique browsers checked')+kpi(sub,'active subscriptions')+kpi(granted,'permission granted')+kpi(denied,'permission denied')+kpi(unsupported,'unsupported')+kpi(vals.filter(e=>e.metadata?.worker_detected).length,'worker detected'));putHtml('pushList',vals.slice(0,50).map(e=>`<div class="admin-row"><div><div class="admin-row-title">${esc(e.metadata?.subscription||'not subscribed')} <span class="admin-tag">${esc(e.metadata?.permission||'unknown')}</span></div><div class="admin-row-sub">Worker ${e.metadata?.worker_detected?'detected':'not detected'} · ${ago(e.created_at)} · visitor ${esc((e.visitor_id||e.session_id||'').slice(0,10))}</div></div></div>`).join('')||empty('No WebPush diagnostics yet.'))}
+function renderPush(){const list=adminData.events.filter(e=>e.event_name==='propush_status'),latest=new Map();list.forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!latest.has(key))latest.set(key,e)});const vals=[...latest.values()],sub=vals.filter(e=>e.metadata?.subscription==='subscribed').length,granted=vals.filter(e=>e.metadata?.permission==='granted').length,denied=vals.filter(e=>e.metadata?.permission==='denied').length,unsupported=vals.filter(e=>e.metadata?.permission==='unsupported').length;putHtml('pushKpis',kpi(vals.length,'unique browsers checked')+kpi(sub,'active subscriptions')+kpi(granted,'permission granted')+kpi(denied,'permission denied')+kpi(unsupported,'unsupported')+kpi(vals.filter(e=>e.metadata?.worker_detected).length,'worker detected'));putHtml('pushList',vals.slice(0,50).map(e=>`<div class="admin-row"><div><div class="admin-row-title">${esc(e.metadata?.subscription||'not subscribed')} <span class="admin-tag">${esc(e.metadata?.permission||'unknown')}</span></div><div class="admin-row-sub">Worker ${e.metadata?.worker_detected?'detected':'not detected'} · ${ago(e.created_at)} · visitor ${esc((e.visitor_id||e.session_id||'').slice(0,10))}</div></div></div>`).join('')||empty('No ProPush diagnostics yet.'))}
 function setActivityFilter(filter,button){adminActivityFilter=filter;document.querySelectorAll('.admin-filter-btn[data-activity-filter]').forEach(x=>x.classList.toggle('active',x===button||x.dataset.activityFilter===filter));renderActivity()}
 function renderActivity(){let rows=adminData.events;if(adminActivityFilter==='important')rows=rows.filter(isImportantEvent);else if(adminActivityFilter==='errors')rows=rows.filter(e=>e.event_name==='js_error');else if(adminActivityFilter==='technical')rows=rows.filter(e=>TECHNICAL_EVENTS.has(e.event_name));rows=rows.slice(0,200);const errors=countEvent('js_error'),important=adminData.events.filter(isImportantEvent).length,technical=adminData.events.filter(e=>TECHNICAL_EVENTS.has(e.event_name)).length;putHtml('activityKpis',kpi(important,'important actions · 7 days')+kpi(errors,'JavaScript errors')+kpi(technical,'technical events')+kpi(adminData.events.length,'events loaded'));putHtml('activityList',rows.length?rows.map(e=>{const m=e.metadata||{},isError=e.event_name==='js_error',cls=isError?'admin-event-error':TECHNICAL_EVENTS.has(e.event_name)?'admin-event-technical':'admin-event-important';const detail=isError?`<div class="admin-meta"><div class="admin-meta-item"><b>Message</b><br>${esc(m.message||'Unknown error')}</div><div class="admin-meta-item"><b>Source</b><br>${esc(m.source||'Not recorded')}${m.line?' · line '+esc(m.line):''}</div></div>`:'';return `<div class="admin-row ${cls}"><div class="admin-row-main"><div class="admin-row-title">${esc(eventLabel(e.event_name))}</div><div class="admin-row-sub">${esc(eventActor(e))} · ${esc(e.page||'unknown page')}${e.partner?' · '+esc(e.partner):''} · ${ago(e.created_at)}<br>${formatLagos(e.created_at)} WAT · Session ${esc((e.session_id||'').slice(0,10))}</div>${detail}</div></div>`}).join(''):empty('No events match this filter.'))}
 function renderWithdrawals(){putHtml('withdrawalList',adminData.withdrawals.length?adminData.withdrawals.map(w=>{const u=profileFor(w.user_id);return `<div class="admin-row"><div class="admin-row-main"><div class="admin-row-title">${esc(u?.full_name||w.account_name||'User')} · ${money(w.amount)} <span class="admin-tag ${w.status==='pending'?'warn':w.status==='rejected'?'bad':''}">${esc(w.status)}</span></div><div class="admin-row-sub">${esc(w.bank||'')} · ${esc(w.masked_account||'')} · requested ${formatLagos(w.requested_at)} WAT${w.payment_reference?'<br>Payment reference: '+esc(w.payment_reference):''}${w.admin_note?'<br>Admin note: '+esc(w.admin_note):''}</div></div>${w.status==='pending'?`<div class="admin-row-actions"><button type="button" class="admin-action approve" onclick="reviewWithdrawal('${w.id}','approved',this)">Approve Paid</button><button type="button" class="admin-action reject" onclick="reviewWithdrawal('${w.id}','rejected',this)">Reject</button></div>`:''}</div>`}).join(''):empty('No withdrawal requests.'))}
@@ -354,5 +452,16 @@ window.addEventListener('focus',()=>{if(adminPanelIsOpen()){adminNextPollAt=Date
 window.addEventListener('online',()=>{if(adminPanelIsOpen()){subscribeAdminRealtime();scheduleAdminRefresh(100)}});
 document.querySelector('.btn-start')?.addEventListener('click',()=>trackEvent('start_clicked'));document.getElementById('register')?.addEventListener('input',()=>trackEvent('registration_started'),{once:true});document.querySelectorAll('a[target="_blank"]').forEach(a=>a.addEventListener('click',()=>trackEvent('external_link_clicked',{url_host:new URL(a.href).hostname,text:(a.textContent||'').trim().slice(0,80)})));
 
-async function boot(){document.querySelectorAll('.screen').forEach(s=>{s.style.display='none'});document.getElementById('landing').style.display='block';document.getElementById('landing').classList.add('active');trackEvent('site_enter',{ref:new URLSearchParams(location.search).get('ref')||null});trackEvent('landing_view');updatePresence();loadRealPublicActivity();subscribePublicActivity();setTimeout(()=>diagnosePush(),1800);const {data}=await supabaseClient.auth.getSession();if(data.session){currentUser=data.session.user;try{await loadProfile();goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';renderConversationCards();runDailyCheckin();trackEvent('session_restored');updatePresence(true)}catch(e){console.error(e)}}if(location.hash==='#admin')openAdmin()}
+async function boot(){
+  document.querySelectorAll('.screen').forEach(s=>{s.style.display='none'});document.getElementById('landing').style.display='block';document.getElementById('landing').classList.add('active');
+  const {data}=await supabaseClient.auth.getSession();
+  if(data.session){
+    currentUser=data.session.user;
+    userName=(currentUser.user_metadata?.full_name||currentUser.email||'User').split(' ')[0];
+    try{await loadProfile({retries:1});goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';deferWork(()=>runDailyCheckin(),350);trackEvent('session_restored')}catch(e){console.error(e)}
+  }
+  deferWork(()=>{trackEvent('site_enter',{ref:new URLSearchParams(location.search).get('ref')||null});trackEvent('landing_view');schedulePresence(200);loadRealPublicActivity();subscribePublicActivity()},500);
+  deferWork(()=>diagnosePush(),2600);
+  if(location.hash==='#admin')openAdmin();
+}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',boot,{once:true})}else{boot()}
