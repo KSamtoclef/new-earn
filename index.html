@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>ChatEarn — Chat With Foreigners & Earn in Naira</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://dtjxcgzpwemdgdeinkcl.supabase.co" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 <meta name="robots" content="noindex,nofollow">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./assets/css/chatearn.css?v=4.0.0">
@@ -575,14 +577,7 @@
 
 </div><!-- page-wrap -->
 
-<script src="./assets/js/chatearn-app.js?v=6.0.0" defer></script>
-  <!-- Hidden visit counter (1x1px, non-interactive, invisible to users) -->
-<div style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;left:-9999px;">
-<script type="text/javascript" src="//widget.supercounters.com/ssl/online_i.js"></script>
-<script type="text/javascript">sc_online_i(1735208,"ffffff","ffffff");</script>
-</div>
-
-
+<script src="./assets/js/chatearn-app.js?v=6.0.2" defer></script>
 <div class="admin-shell" id="adminShell">
   <div class="admin-wrap">
     <div class="admin-head">
@@ -618,16 +613,19 @@
 </div>
 
 
-<script src="./assets/js/chatearn-v3.js?v=4.2.0" defer></script>
+<script src="./assets/js/chatearn-v3.js?v=6.0.2" defer></script>
 <script src="./assets/js/chatearn-v4-returning.js?v=4.1.0" defer></script>
 <script src="./assets/js/chatearn-v4-2.js?v=4.2.0" defer></script>
   <script src="./assets/js/chatearn-v6-admin.js?v=6.0.1" defer></script>
-
-  <!-- start webpushr tracking code --> 
-<script>(function(w,d, s, id) {if(typeof(w.webpushr)!=='undefined') return;w.webpushr=w.webpushr||function(){(w.webpushr.q=w.webpushr.q||[]).push(arguments)};var js, fjs = d.getElementsByTagName(s)[0];js = d.createElement(s); js.id = id;js.async=1;js.src = "https://cdn.webpushr.com/app.min.js";
-fjs.parentNode.appendChild(js);}(window,document, 'script', 'webpushr-jssdk'));
-webpushr('setup',{'key':'BH_DnurzuaZJGB9IXocgQlXTmXzwZk4Ub7t649HoFloUdkF3kIv-xCmFbQme1HKDs-u31hazP2tJF7lnopTzP98' });</script>
-<!-- end webpushr tracking code -->
+<!-- WebPushr loads after the main page is interactive so it does not compete with login/signup. -->
+<script>
+(function(w,d){
+  if(typeof w.webpushr==='undefined'){w.webpushr=function(){(w.webpushr.q=w.webpushr.q||[]).push(arguments)}}
+  w.webpushr('setup',{'key':'BH_DnurzuaZJGB9IXocgQlXTmXzwZk4Ub7t649HoFloUdkF3kIv-xCmFbQme1HKDs-u31hazP2tJF7lnopTzP98'});
+  var load=function(){if(d.getElementById('webpushr-jssdk'))return;var js=d.createElement('script');js.id='webpushr-jssdk';js.async=true;js.src='https://cdn.webpushr.com/app.min.js';d.head.appendChild(js)};
+  if('requestIdleCallback' in w)w.requestIdleCallback(load,{timeout:3500});else w.setTimeout(load,2500);
+})(window,document);
+</script>
 
 </body>
 </html>
