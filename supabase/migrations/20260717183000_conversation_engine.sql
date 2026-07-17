@@ -4,6 +4,8 @@
 
 begin;
 
+set local lock_timeout = '15s';
+
 create table if not exists public.chatearn_chat_partners (
   partner_key text primary key
     check (partner_key ~ '^[A-Za-z0-9_]{3,50}$'),
@@ -166,6 +168,12 @@ on public.chatearn_conversation_choices;
 create trigger chatearn_conversation_choices_touch_updated_at
 before update on public.chatearn_conversation_choices
 for each row execute function chatearn_private.touch_updated_at();
+
+-- Release schema locks before loading conversation content. Every following
+-- phase is idempotent, so an interrupted dashboard request can be rerun safely.
+commit;
+begin;
+set local lock_timeout = '15s';
 
 insert into public.chatearn_chat_partners (
   partner_key, display_name, age, city, country, timezone, flag,
@@ -543,6 +551,12 @@ on conflict (partner_key, node_key, choice_key) do update set
   active = excluded.active,
   updated_at = now();
 
+-- Partner content is now durable; release its locks before installing runtime
+-- functions and compatibility wrappers.
+commit;
+begin;
+set local lock_timeout = '15s';
+
 create or replace function chatearn_private.normalize_chat_body(p_body text)
 returns text
 language sql
@@ -895,6 +909,12 @@ from public, anon, authenticated;
 
 grant execute on function chatearn_private.backfill_legacy_snapshot(text)
 to service_role;
+
+-- Private runtime and RLS are complete. Public chat RPCs are installed and
+-- granted together in the final short transaction.
+commit;
+begin;
+set local lock_timeout = '15s';
 
 create or replace function chatearn_private.direct_partner_answer(
   p_partner_key text,
