@@ -1,4 +1,4 @@
-/* ChatEarn V6.1.4 — performance-safe admin */
+/* ChatEarn V6.1.5 — fast admin */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_V6_1_ADMIN__) return;
@@ -201,7 +201,7 @@
       else if (name === 'withdrawals' || name === 'kyc') await loadQueue(name);
       else if (name === 'users') await loadUsers();
       else if (name === 'system') await loadSystem();
-      setStatus('Live · V6.1 lightweight','connected');
+      setStatus(state.tab==='live'?'Live · 10s refresh':'Ready · refresh on demand','connected');
     } catch (error) {
       showError(error.message || String(error));
       setStatus('Refresh failed','disconnected');
@@ -211,10 +211,11 @@
   }
 
   async function loadOverview() {
-    const d = await rpcCached('chatearn_v6_admin_overview',{p_range:state.range},20000,25000);
+    const d = await rpcCached('chatearn_v6_admin_overview_fast',{p_range:state.range},15000,12000);
     const k = d.kpis || {}, x = d.detail || {}, c = d.conversion || {}, q = d.v6 || {};
+    const isFast = Boolean(d.fast_mode);
     const [qlabel,qclass] = qualityLabel(q.engagement_quality_score);
-    panel('overview').innerHTML = head('Overview') + `
+    panel('overview').innerHTML = head('Overview') + `${isFast?'<div class="ce6-manager-note">Fast live summary. Detailed historical calculations load only when you open Performance.</div>':''}` + `
       <div class="ce6-quality-hero ${qclass}">
         <div><small>ENGAGEMENT QUALITY</small><strong>${fmt(q.engagement_quality_score)}/100</strong><span>${qlabel}</span></div>
         <div class="ce6-quality-grid">
@@ -298,10 +299,15 @@
   }
 
   async function loadPerformance() {
-    const [d,m] = await Promise.all([
-      rpcCached('chatearn_v6_admin_performance',{p_range:state.range},30000,25000),
-      rpcCached('chatearn_v6_admin_offer_task_manager',{p_range:state.range},30000,30000)
+    const [perfResult, managerResult] = await Promise.allSettled([
+      rpcCached('chatearn_v6_admin_performance',{p_range:state.range},30000,18000),
+      rpcCached('chatearn_v6_admin_offer_task_manager',{p_range:state.range},30000,18000)
     ]);
+    const d = perfResult.status === 'fulfilled' ? perfResult.value : { funnel: [], pages: [] };
+    const m = managerResult.status === 'fulfilled' ? managerResult.value : { offers: [] };
+    if (perfResult.status === 'rejected' || managerResult.status === 'rejected') {
+      showError('Some detailed analytics timed out. The rest of the admin remains available; try a shorter date range.');
+    }
     panel('performance').innerHTML = head('Performance') + `
       <div class="ce6-two">
         <div><h3>Funnel</h3>${(d.funnel||[]).map((x,i,a)=>`<div class="ce6-funnel"><b>${esc(x.stage)}</b><span>${fmt(x.value)}</span><i style="width:${a[0]?.value?Math.max(2,100*x.value/a[0].value):0}%"></i></div>`).join('')}</div>
@@ -622,19 +628,23 @@
   window.refreshAdmin = (options = {}) => {
     const now = Date.now();
     const silent = Boolean(options && options.silent);
-    const minimumGap = state.tab === 'live' ? 10000 : 45000;
 
     if (document.hidden || state.loading) return Promise.resolve();
-    if (silent && now - lastExternalRefreshAt < minimumGap) return Promise.resolve();
+
+    // The legacy page calls silent refresh every 10 seconds.
+    // Only Live needs that cadence. Every other tab refreshes manually or on tab change.
+    if (silent && state.tab !== 'live') return Promise.resolve();
+    if (silent && now - lastExternalRefreshAt < 10000) return Promise.resolve();
 
     lastExternalRefreshAt = now;
+    rpcCache.clear();
     return load(state.tab);
   };
   window.adminSwitchTab = (event,name,button) => { event?.preventDefault(); switchTab(name,button); return false; };
 
   function init() {
     const version=document.querySelector('.admin-brand small');
-    if(version)version.textContent='v6.1.4';
+    if(version)version.textContent='v6.1.5';
     if(location.hash==='#admin') setTimeout(window.openAdmin,100);
     window.addEventListener('hashchange',()=>{if(location.hash==='#admin')window.openAdmin();});
   }
