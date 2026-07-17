@@ -892,12 +892,6 @@ revoke all on function chatearn_private.backfill_legacy_snapshot_account_core(te
 from public, anon, authenticated, service_role;
 revoke all on function chatearn_private.backfill_legacy_snapshot(text)
 from public, anon, authenticated;
-revoke all on function public.chatearn_get_chat_list()
-from public, anon;
-revoke all on function public.chatearn_open_conversation(text, integer)
-from public, anon;
-revoke all on function public.chatearn_send_chat_message(text, text, text, text)
-from public, anon;
 
 grant execute on function chatearn_private.backfill_legacy_snapshot(text)
 to service_role;
