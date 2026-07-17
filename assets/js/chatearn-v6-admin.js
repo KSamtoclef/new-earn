@@ -1,4 +1,4 @@
-/* ChatEarn V6.1.1 — standalone operational admin */
+/* ChatEarn V6.1.4 — performance-safe admin */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_V6_1_ADMIN__) return;
@@ -17,6 +17,39 @@
     cache: new Map(), shellReady: false, loading: false
   };
 
+  const rpcInflight = new Map();
+  const rpcCache = new Map();
+
+  function rpcKey(name, args) {
+    return `${name}:${JSON.stringify(args || {})}`;
+  }
+
+  async function rpcCached(name, args = {}, ttlMs = 15000, timeoutMs = 20000) {
+    const key = rpcKey(name, args);
+    const cached = rpcCache.get(key);
+    if (cached && Date.now() - cached.at < ttlMs) return cached.value;
+    if (rpcInflight.has(key)) return rpcInflight.get(key);
+
+    const request = rpc(name, args, timeoutMs)
+      .then(value => {
+        rpcCache.set(key, { at: Date.now(), value });
+        return value;
+      })
+      .finally(() => rpcInflight.delete(key));
+
+    rpcInflight.set(key, request);
+    return request;
+  }
+
+  function invalidateManagerCache() {
+    for (const key of [...rpcCache.keys()]) {
+      if (key.startsWith('chatearn_v6_admin_manager_inventory:')
+          || key.startsWith('chatearn_v6_admin_offer_task_manager:')) {
+        rpcCache.delete(key);
+      }
+    }
+  }
+
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = n => Number(n || 0).toLocaleString();
@@ -30,11 +63,20 @@
   const time = v => v ? new Date(v).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' }) : '—';
   const notify = msg => window.showToast ? window.showToast(msg) : alert(msg);
 
-  async function rpc(name, args = {}) {
-    let result = await client.rpc(name, args);
+  async function rpc(name, args = {}, timeoutMs = 20000) {
+    const run = () => client.rpc(name, args);
+    const withTimeout = promise => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`${name} timed out after ${Math.round(timeoutMs / 1000)} seconds`)),
+        timeoutMs
+      ))
+    ]);
+
+    let result = await withTimeout(run());
     if (result.error && /jwt|session|auth/i.test(result.error.message || '')) {
       await client.auth.refreshSession();
-      result = await client.rpc(name, args);
+      result = await withTimeout(run());
     }
     if (result.error) throw result.error;
     return typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
@@ -169,7 +211,7 @@
   }
 
   async function loadOverview() {
-    const d = await rpc('chatearn_v6_admin_overview',{p_range:state.range});
+    const d = await rpcCached('chatearn_v6_admin_overview',{p_range:state.range},20000,25000);
     const k = d.kpis || {}, x = d.detail || {}, c = d.conversion || {}, q = d.v6 || {};
     const [qlabel,qclass] = qualityLabel(q.engagement_quality_score);
     panel('overview').innerHTML = head('Overview') + `
@@ -257,8 +299,8 @@
 
   async function loadPerformance() {
     const [d,m] = await Promise.all([
-      rpc('chatearn_v6_admin_performance',{p_range:state.range}),
-      rpc('chatearn_v6_admin_offer_task_manager',{p_range:state.range})
+      rpcCached('chatearn_v6_admin_performance',{p_range:state.range},30000,25000),
+      rpcCached('chatearn_v6_admin_offer_task_manager',{p_range:state.range},30000,30000)
     ]);
     panel('performance').innerHTML = head('Performance') + `
       <div class="ce6-two">
@@ -310,19 +352,20 @@
     </form>`;
   }
 
-  async function loadOffers() {
-    const d = await rpc('chatearn_v6_admin_offer_task_manager',{p_range:state.range});
+  async function loadOffers(force = false) {
+    if (force) invalidateManagerCache();
+    const d = await rpcCached('chatearn_v6_admin_manager_inventory',{},force ? 0 : 10000,15000);
     state.cache.set('manager',d);
     panel('offers').innerHTML = head('Offers & Tasks') + `
-      <div class="ce6-manager-actions"><button class="admin-btn primary" data-add-offer>Add offer</button><button class="admin-btn primary" data-add-task>Add task</button></div>
+      <div class="ce6-manager-actions"><button class="admin-btn primary" data-add-offer>Add offer</button><button class="admin-btn primary" data-add-task>Add task</button><button class="admin-btn" data-manager-refresh>Refresh manager</button></div><div class="ce6-manager-note">Move actions reorder the real database list. Delete removes unused records; records with history are safely removed from rotation and hidden while analytics remain intact.</div>
       <div id="ce6Editor"></div>
-      <h3 class="ce6-section-title">Offers</h3>
-      <div class="ce6-manager-list">${(d.offers||[]).map(o=>{
+      <h3 class="ce6-section-title">Active & paused offers</h3>
+      <div class="ce6-manager-list">${(d.offers||[]).filter(o=>!o.archived_at).map(o=>{
         const [label,cls]=qualityLabel(o.quality_score);
         return `<article class="ce6-manager-card ${o.archived_at?'archived':''}">
-          <div class="ce6-manager-top"><div><b>${esc(o.name)}</b><small>${esc(o.offer_key)} · ${o.active?'Active':'Paused'}${o.archived_at?' · Archived':''}</small></div><span class="ce6-score ${cls}">${fmt(o.quality_score)}/100 ${label}</span></div>
+          <div class="ce6-manager-top"><div><b>${esc(o.name)}</b><small>${esc(o.offer_key)} · ${o.active?'Active':'Paused'}${o.archived_at?' · Archived':''}</small></div><span class="ce6-score ${o.active?'excellent':'weak'}">${o.active?'Active':'Paused'} · Position ${fmt(o.display_order)}</span></div>
           <p>${esc(o.url)}</p>
-          <div class="ce6-metrics"><span>${pct(o.unique_ctr)} CTR</span><span>${pct(o.return_rate)} return</span><span>${pct(o.meaningful_rate)} meaningful</span><span>${dur(o.median_away_seconds)} median</span><span>${fmt(o.completed_cycles)} cycles</span></div>
+          <div class="ce6-metrics"><span>Position ${fmt(o.display_order)}</span><span>${fmt(o.total_events)} recorded events</span><span>${fmt(o.total_assignments)} linked assignments</span><span>${fmt(o.quality_threshold_seconds)}s quality threshold</span></div>
           <div class="ce6-card-actions">
             <button data-edit-offer="${esc(o.offer_key)}">Edit</button>
             <button data-offer-action="${o.active?'pause':'resume'}" data-key="${esc(o.offer_key)}">${o.active?'Pause':'Resume'}</button>
@@ -333,12 +376,24 @@
             <button class="danger" data-offer-action="delete" data-key="${esc(o.offer_key)}">Delete</button>
           </div>
         </article>`;
-      }).join('')||'<div class="admin-empty">No offers.</div>'}</div>
-      <h3 class="ce6-section-title">Tasks</h3>
-      <div class="ce6-manager-list">${(d.tasks||[]).map(t=>`<article class="ce6-manager-card ${t.archived_at?'archived':''}">
+      }).join('')||'<div class="admin-empty">No active or paused offers.</div>'}</div>
+      <details class="ce6-archive-box">
+        <summary>Archived offers (${(d.offers||[]).filter(o=>o.archived_at).length})</summary>
+        <div class="ce6-manager-list">${(d.offers||[]).filter(o=>o.archived_at).map(o=>`<article class="ce6-manager-card archived">
+          <div class="ce6-manager-top"><div><b>${esc(o.name)}</b><small>${esc(o.offer_key)} · Archived</small></div><span class="ce6-score weak">Archived</span></div>
+          <p>${esc(o.url)}</p>
+          <div class="ce6-card-actions">
+            <button data-edit-offer="${esc(o.offer_key)}">Edit</button>
+            <button data-offer-action="restore" data-key="${esc(o.offer_key)}">Restore</button>
+            <button class="danger" data-offer-action="delete" data-key="${esc(o.offer_key)}">Delete</button>
+          </div>
+        </article>`).join('')||'<div class="admin-empty">No archived offers.</div>'}</div>
+      </details>
+      <h3 class="ce6-section-title">Active & paused tasks</h3>
+      <div class="ce6-manager-list">${(d.tasks||[]).filter(t=>!t.archived_at).map(t=>`<article class="ce6-manager-card">
         <div class="ce6-manager-top"><div><b>${esc(t.title)}</b><small>${esc(t.task_key)} · ${esc(t.task_type)} · ${t.active?'Active':'Paused'}${t.archived_at?' · Archived':''}</small></div><span>${pct(t.completion_rate)} complete</span></div>
         <p>${esc(t.subtitle||'')}</p>
-        <div class="ce6-metrics"><span>${fmt(t.assignments)} assignments</span><span>${fmt(t.completions)} completed</span><span>₦${fmt(t.reward_amount)} reward</span><span>${fmt(t.required_count)} required</span></div>
+        <div class="ce6-metrics"><span>Position ${fmt(t.display_order)}</span><span>${fmt(t.assignments)} assignments</span><span>${fmt(t.completions)} completed</span><span>₦${fmt(t.reward_amount)} reward</span><span>${fmt(t.required_count)} required</span></div>
         <div class="ce6-card-actions">
           <button data-edit-task="${esc(t.task_key)}">Edit</button>
           <button data-task-action="${t.active?'pause':'resume'}" data-key="${esc(t.task_key)}">${t.active?'Pause':'Resume'}</button>
@@ -348,7 +403,19 @@
           <button data-task-action="${t.archived_at?'restore':'archive'}" data-key="${esc(t.task_key)}">${t.archived_at?'Restore':'Archive'}</button>
           <button class="danger" data-task-action="delete" data-key="${esc(t.task_key)}">Delete</button>
         </div>
-      </article>`).join('')||'<div class="admin-empty">No tasks.</div>'}</div>`;
+      </article>`).join('')||'<div class="admin-empty">No active or paused tasks.</div>'}</div>
+      <details class="ce6-archive-box">
+        <summary>Archived tasks (${(d.tasks||[]).filter(t=>t.archived_at).length})</summary>
+        <div class="ce6-manager-list">${(d.tasks||[]).filter(t=>t.archived_at).map(t=>`<article class="ce6-manager-card archived">
+          <div class="ce6-manager-top"><div><b>${esc(t.title)}</b><small>${esc(t.task_key)} · Archived</small></div><span>${pct(t.completion_rate)} complete</span></div>
+          <p>${esc(t.subtitle||'')}</p>
+          <div class="ce6-card-actions">
+            <button data-edit-task="${esc(t.task_key)}">Edit</button>
+            <button data-task-action="restore" data-key="${esc(t.task_key)}">Restore</button>
+            <button class="danger" data-task-action="delete" data-key="${esc(t.task_key)}">Delete permanently</button>
+          </div>
+        </article>`).join('')||'<div class="admin-empty">No archived tasks.</div>'}</div>
+      </details>`;
   }
 
   async function loadQueue(kind) {
@@ -367,7 +434,7 @@
   }
 
   async function loadSystem() {
-    const d = await rpc('chatearn_v6_admin_system',{p_range:state.range,p_limit:150});
+    const d = await rpcCached('chatearn_v6_admin_system',{p_range:state.range,p_limit:150},15000,20000);
     panel('system').innerHTML = head('System') + `<div class="admin-list">${(d.rows||[]).map(x=>`<div class="admin-row"><div><b>${esc(x.event_name||'System event')}</b><div class="admin-row-sub">${time(x.created_at)} · ${esc(x.page||'')}<br>${esc(JSON.stringify(x.metadata||{})).slice(0,500)}</div></div></div>`).join('')||'<div class="admin-empty">No system events.</div>'}</div>`;
   }
 
@@ -397,6 +464,7 @@
     if (page) { state.journeyOffset=Math.max(0,state.journeyOffset+(page.dataset.page==='next'?25:-25)); await loadJourneys(); return; }
     const bulkBtn = e.target.closest('[data-bulk]');
     if (bulkBtn) { await bulk(bulkBtn.dataset.bulk,bulkBtn.dataset.status); return; }
+    if (e.target.closest('[data-manager-refresh]')) { await loadOffers(true); return; }
     if (e.target.closest('[data-add-offer]')) { $('ce6Editor').innerHTML=offerForm(); return; }
     if (e.target.closest('[data-add-task]')) { $('ce6Editor').innerHTML=taskForm(); return; }
     if (e.target.closest('[data-cancel-form]')) { $('ce6Editor').innerHTML=''; return; }
@@ -406,15 +474,62 @@
     if (et) { const d=state.cache.get('manager'); const t=(d.tasks||[]).find(x=>x.task_key===et.dataset.editTask); $('ce6Editor').innerHTML=taskForm(t); return; }
     const oa = e.target.closest('[data-offer-action]');
     if (oa) {
-      const action=oa.dataset.offerAction,key=oa.dataset.key;
+      const action = oa.dataset.offerAction;
+      const key = oa.dataset.key;
       if (['delete','archive'].includes(action) && !confirm(`${action} offer ${key}?`)) return;
-      await rpc('chatearn_v6_admin_offer_action',{p_offer_key:key,p_action:action}); notify(`Offer ${action} completed`); await loadOffers(); return;
+
+      const originalText = oa.textContent;
+      oa.disabled = true;
+      oa.textContent = 'Working…';
+
+      try {
+        const result = await rpc('chatearn_v6_admin_offer_action', {
+          p_offer_key: key,
+          p_action: action
+        });
+
+        notify(result?.message || `Offer ${String(result?.action || action).replaceAll('_', ' ')} completed.`);
+        invalidateManagerCache(); await loadOffers(true);
+      } catch (error) {
+        showError(error.message || String(error));
+        notify(error.message || 'Offer action failed.');
+      } finally {
+        oa.disabled = false;
+        oa.textContent = originalText;
+      }
+      return;
     }
     const ta = e.target.closest('[data-task-action]');
     if (ta) {
-      const action=ta.dataset.taskAction,key=ta.dataset.key;
+      const action = ta.dataset.taskAction;
+      const key = ta.dataset.key;
       if (['delete','archive'].includes(action) && !confirm(`${action} task ${key}?`)) return;
-      await rpc('chatearn_v6_admin_task_action',{p_task_key:key,p_action:action}); notify(`Task ${action} completed`); await loadOffers(); return;
+
+      const originalText = ta.textContent;
+      ta.disabled = true;
+      ta.textContent = 'Working…';
+
+      try {
+        const result = await rpc('chatearn_v6_admin_task_action', {
+          p_task_key: key,
+          p_action: action
+        });
+
+        const message = result?.message
+          || (result?.action === 'archive_instead_of_delete'
+            ? 'Task has activity history, so it was archived safely.'
+            : `Task ${String(result?.action || action).replaceAll('_', ' ')} completed.`);
+
+        notify(message);
+        invalidateManagerCache(); await loadOffers(true);
+      } catch (error) {
+        showError(error.message || String(error));
+        notify(error.message || 'Task action failed.');
+      } finally {
+        ta.disabled = false;
+        ta.textContent = originalText;
+      }
+      return;
     }
     if (e.target.closest('[data-user-search]')) { state.userOffset=0; await loadUsers(); }
   }
@@ -447,7 +562,7 @@
         p_max_exposures_per_user:Number(f.get('maxExposure')||1),p_cooldown_hours:Number(f.get('cooldown')||0),
         p_notes:f.get('notes')||null
       });
-      notify('Offer saved'); $('ce6Editor').innerHTML=''; await loadOffers();
+      notify('Offer saved'); $('ce6Editor').innerHTML=''; invalidateManagerCache(); await loadOffers(true);
     } else if (e.target.id === 'ce6TaskForm') {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -460,7 +575,7 @@
         p_max_daily_completions:Number(f.get('maxDaily')||1),p_linked_offer_key:f.get('linkedOffer')||null,
         p_notes:f.get('notes')||null
       });
-      notify('Task saved'); $('ce6Editor').innerHTML=''; await loadOffers();
+      notify('Task saved'); $('ce6Editor').innerHTML=''; invalidateManagerCache(); await loadOffers(true);
     }
   }
 
@@ -503,12 +618,23 @@
     $('adminContent').style.display='none'; $('adminLoginBox').style.display='block';
   };
 
-  window.refreshAdmin = () => load(state.tab);
+  let lastExternalRefreshAt = 0;
+  window.refreshAdmin = (options = {}) => {
+    const now = Date.now();
+    const silent = Boolean(options && options.silent);
+    const minimumGap = state.tab === 'live' ? 10000 : 45000;
+
+    if (document.hidden || state.loading) return Promise.resolve();
+    if (silent && now - lastExternalRefreshAt < minimumGap) return Promise.resolve();
+
+    lastExternalRefreshAt = now;
+    return load(state.tab);
+  };
   window.adminSwitchTab = (event,name,button) => { event?.preventDefault(); switchTab(name,button); return false; };
 
   function init() {
     const version=document.querySelector('.admin-brand small');
-    if(version)version.textContent='v6.1.1';
+    if(version)version.textContent='v6.1.4';
     if(location.hash==='#admin') setTimeout(window.openAdmin,100);
     window.addEventListener('hashchange',()=>{if(location.hash==='#admin')window.openAdmin();});
   }
