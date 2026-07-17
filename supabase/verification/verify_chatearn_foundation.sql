@@ -1,7 +1,7 @@
 -- ChatEarn Module 1 verification
 -- Read-only against permanent data. Results must all show passed = true before cutover.
 
-begin read only;
+begin;
 
 create temporary table chatearn_verification_results (
   check_name text not null,
