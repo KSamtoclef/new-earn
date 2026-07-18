@@ -3,12 +3,12 @@
   'use strict';
   if (window.__CHAT_EARN_MODULE_7_ADMIN_COORDINATOR__) return;
   window.__CHAT_EARN_MODULE_7_ADMIN_COORDINATOR__ = true;
-  const VERSION = '8F.3';
+  const VERSION = '8F.4';
   const registry = [
     { key:'7B', flag:'__CHAT_EARN_MODULE_7B2__', src:'./assets/js/chatearn-v7-admin-withdrawals.js?v=7.2.0' },
     { key:'7C', flag:'__CHAT_EARN_MODULE_7C2__', src:'./assets/js/chatearn-v7-admin-kyc.js?v=7.2.0' },
     { key:'8D', flag:'__CHAT_EARN_V8D3_FLOW__', src:'./assets/js/chatearn-v8d-offer-withdrawal-flow.js?v=8.3.1' },
-    { key:'8E', flag:'__CHAT_EARN_V8E3_DIRECT_WITHDRAWAL__', src:'./assets/js/chatearn-v8e-direct-withdrawal-flow.js?v=8.3.0' },
+    { key:'8E', flag:'__CHAT_EARN_V8E4_DIRECT_WITHDRAWAL__', src:'./assets/js/chatearn-v8e-direct-withdrawal-flow.js?v=8.4.0' },
     { key:'8F', flag:'__CHAT_EARN_V8F1_STABILIZER__', src:'./assets/js/chatearn-v8f-final-stabilizer.js?v=8.1.0' }
   ];
   const failures = new Map();
