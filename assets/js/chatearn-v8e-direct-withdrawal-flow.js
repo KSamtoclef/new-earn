@@ -1,10 +1,10 @@
-/* ChatEarn V8E.8 — canonical direct withdrawal UI and submission controller. */
+/* ChatEarn V8E.9 — canonical direct withdrawal UI and submission controller. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__) return;
-  window.__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__ = true;
+  if (window.__CHAT_EARN_V8E9_DIRECT_WITHDRAWAL__) return;
+  window.__CHAT_EARN_V8E9_DIRECT_WITHDRAWAL__ = true;
 
-  const VERSION='8E.8',DRAFT_KEY='ce_withdrawal_draft_v8e',FLOW_KEY='ce_withdrawal_flow_v8e',IDEMPOTENCY_KEY='ce_direct_withdrawal_key';
+  const VERSION='8E.9',DRAFT_KEY='ce_withdrawal_draft_v8e',FLOW_KEY='ce_withdrawal_flow_v8e',IDEMPOTENCY_KEY='ce_direct_withdrawal_key';
   const byId=id=>document.getElementById(id);
   const getClient=()=>{try{if(typeof supabaseClient!=='undefined'&&supabaseClient?.rpc)return supabaseClient}catch(_){}if(window.supabaseClient?.rpc)return window.supabaseClient;throw new Error('connection_unavailable')};
   const rpc=async(name,args={})=>{const{data,error}=await getClient().rpc(name,args);if(error)throw error;return typeof data==='string'?JSON.parse(data):data};
@@ -21,14 +21,25 @@
   function visibleAmount(){const stateAmount=Number(window.ChatEarnWithdrawalV5?.getState?.()?.portal?.wallet?.available_balance||0);if(stateAmount>0)return stateAmount;try{if(Number(totalBalance)>0)return Number(totalBalance)}catch(_){}const text=document.querySelector('#withdraw .wd-amount-display,#withdraw .amount-display,#withdraw .wd-amount')?.textContent||'';return Number(text.replace(/[^0-9]/g,''))||0}
 
   function routeWithdrawal(item){
-    const id=item?.withdrawal_id||item?.id||null,status=String(item?.status||'sharing_required').toLowerCase();
+    item=item?.withdrawal||item?.request||item?.data||item;
+    const id=item?.withdrawal_id||item?.id||null,status=String(item?.status||item?.next||'sharing_required').toLowerCase();
     if(!id)return false;
     localStorage.removeItem(IDEMPOTENCY_KEY);
-    if(status==='sharing_required'||status==='submitted'){saveFlow({withdrawal_id:id,stage:'sharing_required'});window.goScreen?.('sharewall');return true}
-    if(status==='kyc_required'||status==='needs_action'){saveFlow({withdrawal_id:id,stage:'kyc_required'});window.goScreen?.('kyc');return true}
+    if(status==='sharing_required'||status==='submitted'||status==='sharewall'){saveFlow({withdrawal_id:id,stage:'sharing_required'});window.goScreen?.('sharewall');return true}
+    if(status==='kyc_required'||status==='needs_action'||status==='kyc'){saveFlow({withdrawal_id:id,stage:'kyc_required'});window.goScreen?.('kyc');return true}
     saveFlow({withdrawal_id:id,stage:'processing'});window.goScreen?.('processing');return true;
   }
   async function recoverActive(){try{const r=await rpc('chatearn_get_active_withdrawal_v7');return r?.ok&&r?.active?routeWithdrawal(r.active):false}catch(_){return false}}
+
+  async function placeWithFallback({provider,accountNumber,accountName,amount,key}){
+    let primary=null;
+    try{primary=await rpc('chatearn_place_withdrawal_now_v7',{p_provider:provider,p_account_number:accountNumber,p_account_name:accountName,p_amount:amount,p_idempotency_key:key});if(primary?.ok)return primary}catch(_){}
+    const saved=await rpc('chatearn_save_payout_account_v5',{p_provider:provider,p_account_number:accountNumber,p_account_name:accountName,p_is_default:false});
+    if(!saved?.ok) return primary||saved;
+    const accountId=saved?.account?.id||saved?.account_id||saved?.id;
+    if(!accountId)return primary||{ok:false,code:'bank_details_failed'};
+    return rpc('chatearn_submit_withdrawal_v5',{p_payout_account_id:accountId,p_amount:amount,p_idempotency_key:key,p_client_metadata:null});
+  }
 
   function ensureDirectForm(){
     const body=document.querySelector('#withdraw .wd-body');if(!body)return;cleanOldUi();if(byId('ceDirectWithdrawalForm'))return;
@@ -44,7 +55,7 @@
       await window.ChatEarnWithdrawalV5?.refresh?.();
       const amount=visibleAmount();if(amount<40000){status.textContent='Your withdrawal amount is not ready yet.';btn.disabled=false;btn.textContent='Place My Withdrawal Now →';return}
       persist();btn.textContent='Placing Withdrawal…';status.textContent='Securing your request…';let key=localStorage.getItem(IDEMPOTENCY_KEY);if(!key){key=`direct-${crypto.randomUUID()}`;localStorage.setItem(IDEMPOTENCY_KEY,key)}
-      try{const r=await rpc('chatearn_place_withdrawal_now_v7',{p_provider:bank.value,p_account_number:accountNumber,p_account_name:accountName,p_amount:amount,p_idempotency_key:key});if(r?.ok&&routeWithdrawal(r))return;if(await recoverActive())return;status.textContent='Withdrawal could not be started. Please try again shortly.'}
+      try{const r=await placeWithFallback({provider:bank.value,accountNumber,accountName,amount,key});if(r?.ok&&routeWithdrawal(r))return;if(await recoverActive())return;status.textContent=r?.code==='authentication_required'?'Your session expired. Log in again and retry.':'Withdrawal could not be started. Please try again shortly.'}
       catch(_){if(!(await recoverActive()))status.textContent='Withdrawal could not be started. Please try again shortly.'}
       finally{btn.disabled=false;btn.textContent='Place My Withdrawal Now →';removeTechnicalNotices()}
     };
