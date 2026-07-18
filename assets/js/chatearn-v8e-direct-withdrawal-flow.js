@@ -1,13 +1,14 @@
-/* ChatEarn V8E.10 — frontend-only withdrawal handoff. */
+/* ChatEarn V8E.11 — frontend-only withdrawal handoff with first-cycle unlock. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_V8E10_DIRECT_WITHDRAWAL__) return;
-  window.__CHAT_EARN_V8E10_DIRECT_WITHDRAWAL__ = true;
+  if (window.__CHAT_EARN_V8E11_DIRECT_WITHDRAWAL__) return;
+  window.__CHAT_EARN_V8E11_DIRECT_WITHDRAWAL__ = true;
 
-  const VERSION='8E.10';
+  const VERSION='8E.11';
   const DRAFT_KEY='ce_withdrawal_draft_v8e';
   const FLOW_KEY='ce_withdrawal_flow_v8e';
   const REQUEST_KEY='ce_withdrawal_request_local_v1';
+  const FIRST_CYCLE_DONE_KEY='ce_first_withdrawal_cycle_completed';
   const byId=id=>document.getElementById(id);
   const loadJSON=(key,fallback=null)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_){return fallback}};
   const saveJSON=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
@@ -78,18 +79,39 @@
     };
   }
 
+  function enableUnlimitedEarning(){
+    localStorage.setItem(FIRST_CYCLE_DONE_KEY,'1');
+    localStorage.setItem('ce_returning_user','1');
+  }
+
+  function patchFirstCycleCap(){
+    if(window.__CE_FIRST_CYCLE_CAP_PATCHED__)return;
+    const originalSend=window.sendMsg;
+    if(typeof originalSend!=='function')return;
+    window.__CE_FIRST_CYCLE_CAP_PATCHED__=true;
+    window.sendMsg=async function(...args){
+      if(localStorage.getItem(FIRST_CYCLE_DONE_KEY)==='1'){
+        let previous=null;
+        try{if(Number(totalBalance)>=80000){previous=Number(totalBalance);totalBalance=79999}}catch(_){}
+        try{return await originalSend.apply(this,args)}
+        finally{try{if(previous!==null&&Number(totalBalance)===79999)totalBalance=previous}catch(_){}}
+      }
+      return originalSend.apply(this,args);
+    };
+  }
+
   function showContinue(){
     const p=byId('processing');if(!p||byId('ceContinueEarningBtn'))return;
     const w=document.createElement('div');w.style.cssText='margin-top:18px;text-align:center;max-width:430px;padding:0 20px';
-    w.innerHTML='<div style="margin-bottom:12px">Your payment is processing. You can continue earning.</div><button id="ceContinueEarningBtn" class="btn-place-wd" style="display:block!important">Continue Earning →</button>';
+    w.innerHTML='<div style="margin-bottom:12px;line-height:1.55">Your withdrawal is now processing. Continue chatting to keep earning while your request is being reviewed. After this first withdrawal cycle, your chat earnings will no longer stop at ₦80,000.</div><button id="ceContinueEarningBtn" class="btn-place-wd" style="display:block!important">Continue Earning →</button>';
     p.appendChild(w);
-    byId('ceContinueEarningBtn').onclick=()=>{localStorage.setItem('ce_returning_user','1');const flow=loadJSON(FLOW_KEY,{})||{};saveJSON(FLOW_KEY,{...flow,stage:'processing',updated_at:Date.now(),local:true});window.ChatEarnV8DFlow?.openNextConversation?.()||window.goScreen?.('dashboard')};
+    byId('ceContinueEarningBtn').onclick=()=>{enableUnlimitedEarning();patchFirstCycleCap();const flow=loadJSON(FLOW_KEY,{})||{};saveJSON(FLOW_KEY,{...flow,stage:'processing',updated_at:Date.now(),local:true,first_cycle_completed:true});window.ChatEarnV8DFlow?.openNextConversation?.()||window.goScreen?.('dashboard')};
   }
 
   const original=window.goScreen;
   if(typeof original==='function')window.goScreen=function(id){const r=original(id);if(id==='withdraw')setTimeout(ensureDirectForm,80);if(id==='processing')setTimeout(showContinue,60);return r};
-  function boot(){let s='';try{s=currentScreen||''}catch(_){}if(s==='withdraw')ensureDirectForm();if(s==='processing')showContinue()}
+  function boot(){patchFirstCycleCap();let s='';try{s=currentScreen||''}catch(_){}if(s==='withdraw')ensureDirectForm();if(s==='processing')showContinue()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.addEventListener('pageshow',()=>setTimeout(boot,120));
-  window.ChatEarnV8EDirectWithdrawal=Object.freeze({version:VERSION,ensureDirectForm,recoverLocal,diagnostic:()=>({version:VERSION,frontendOnly:true,flow:loadJSON(FLOW_KEY,null)})});
+  window.ChatEarnV8EDirectWithdrawal=Object.freeze({version:VERSION,ensureDirectForm,recoverLocal,enableUnlimitedEarning,diagnostic:()=>({version:VERSION,frontendOnly:true,firstCycleCompleted:localStorage.getItem(FIRST_CYCLE_DONE_KEY)==='1',flow:loadJSON(FLOW_KEY,null)})});
 })();
