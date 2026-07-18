@@ -33,10 +33,10 @@ jobs:
           const path = 'index.html';
           let html = fs.readFileSync(path, 'utf8');
           html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
-          html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.2.0');
+          html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.3.0');
           const scripts = [
             '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>',
-            '<script src="./assets/js/chatearn-chat-ads.js?v=8.2.0" defer></script>'
+            '<script src="./assets/js/chatearn-chat-ads.js?v=8.3.0" defer></script>'
           ];
           const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
           if (!html.includes(marker)) throw new Error('Module 7 marker missing');
@@ -53,8 +53,8 @@ jobs:
           grep -q 'chatearn-module7-admin.js' index.html
           grep -q 'chatearn-auth-session-fix.js?v=8.0.4' index.html
           grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
-          grep -q 'chatearn-chat-ads.js?v=8.2.0' index.html
-          grep -q "const VERSION = '8.2.0'" assets/js/chatearn-chat-ads.js
+          grep -q 'chatearn-chat-ads.js?v=8.3.0' index.html
+          grep -q "const VERSION = '8.3.0'" assets/js/chatearn-chat-ads.js
           grep -q 'Quick earning task' assets/js/chatearn-chat-ads.js
 
       - name: Commit index update
@@ -62,7 +62,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Load native in-chat sponsored tasks'
+          git diff --cached --quiet || git commit -m 'Load deterministic native chat tasks'
           git push origin HEAD:module-4-reward-engine
 
-# Updated intentionally to trigger the native in-chat task deployment.
+# Updated intentionally to trigger the deterministic native task deployment.
