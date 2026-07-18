@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Wire final runtime assets and session limit
+      - name: Wire verified runtime assets and session limit
         run: |
           node - <<'NODE'
           const fs = require('fs');
@@ -35,11 +35,13 @@ jobs:
           let html = fs.readFileSync(indexPath, 'utf8');
           html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
           html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.4.0');
+          html = html.replace(/chatearn-chat-runtime-integrity\.js\?v=[^"']+/g, 'chatearn-chat-runtime-integrity.js?v=8.5.0');
 
           const requiredScripts = [
             '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>',
             '<script src="./assets/js/chatearn-first-session-limit.js?v=8.0.1" defer></script>',
-            '<script src="./assets/js/chatearn-chat-ads.js?v=8.4.0" defer></script>'
+            '<script src="./assets/js/chatearn-chat-ads.js?v=8.4.0" defer></script>',
+            '<script src="./assets/js/chatearn-chat-runtime-integrity.js?v=8.5.0" defer></script>'
           ];
           const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
           if (!html.includes(marker)) throw new Error('Module 7 marker missing from index.html');
@@ -50,10 +52,8 @@ jobs:
 
           const appPath = 'assets/js/chatearn-app.js';
           let app = fs.readFileSync(appPath, 'utf8');
-          const oldLimit = 'const MIN_WITHDRAW=40000,MAX_EARN=65000,SIGNUP_BONUS=10000;';
-          const newLimit = 'const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;';
-          if (app.includes(oldLimit)) app = app.replace(oldLimit, newLimit);
-          if (!app.includes(newLimit)) throw new Error('Unable to verify the 80000 first-session limit in chatearn-app.js');
+          app = app.replace('const MIN_WITHDRAW=40000,MAX_EARN=65000,SIGNUP_BONUS=10000;', 'const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;');
+          if (!app.includes('MAX_EARN=80000')) throw new Error('Unable to verify the 80000 first-session limit');
           fs.writeFileSync(appPath, app);
           NODE
 
@@ -66,9 +66,10 @@ jobs:
           grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
           grep -q 'chatearn-first-session-limit.js?v=8.0.1' index.html
           grep -q 'chatearn-chat-ads.js?v=8.4.0' index.html
-          grep -q "const VERSION = '8.4.0'" assets/js/chatearn-chat-ads.js
+          grep -q 'chatearn-chat-runtime-integrity.js?v=8.5.0' index.html
+          grep -q "const VERSION = '8.5.0'" assets/js/chatearn-chat-runtime-integrity.js
           grep -q 'MAX_EARN=80000' assets/js/chatearn-app.js
-          grep -q 'Quick earning task' assets/js/chatearn-chat-ads.js
+          grep -q 'Quick earning task' assets/js/chatearn-chat-runtime-integrity.js
           grep -q 'First earning session complete' assets/js/chatearn-first-session-limit.js
 
       - name: Commit verified runtime wiring
@@ -76,7 +77,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html assets/js/chatearn-app.js
-          git diff --cached --quiet || git commit -m 'Finalize chat tasks and 80k first earning session'
+          git diff --cached --quiet || git commit -m 'Wire consolidated chat runtime integrity'
           git push origin HEAD:module-4-reward-engine
 
-# Updated intentionally to trigger the final verified runtime wiring.
+# Updated intentionally to trigger the consolidated runtime deployment.
