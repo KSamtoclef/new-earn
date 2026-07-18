@@ -4,11 +4,12 @@
   if (window.__CHAT_EARN_CHAT_ADS__) return;
   window.__CHAT_EARN_CHAT_ADS__ = true;
 
-  const VERSION = '8.1.0';
+  const VERSION = '8.1.1';
   const EVERY = 3;
   let earnedMessages = 0;
   let lastShownAt = 0;
   let observer = null;
+  let observedBody = null;
 
   const chatBody = () => document.getElementById('chatBody');
   const safeTrack = (name, metadata = {}) => {
@@ -61,11 +62,15 @@
     return count;
   }
 
-  function startObserver() {
+  function startObserver(resetCounter = false) {
     const body = chatBody();
     if (!body) return false;
+    if (observer && observedBody === body) return true;
+
     observer?.disconnect();
-    earnedMessages = 0;
+    observedBody = body;
+    if (resetCounter) earnedMessages = 0;
+
     observer = new MutationObserver(records => {
       let added = 0;
       records.forEach(record => record.addedNodes.forEach(node => { added += countEarnedNodes(node); }));
@@ -83,8 +88,12 @@
     const original = window.openChat;
     if (typeof original !== 'function' || original.__ceChatAdsWrapped) return false;
     const wrapped = async function (...args) {
+      earnedMessages = 0;
+      observedBody = null;
+      observer?.disconnect();
+      observer = null;
       const result = await original.apply(this, args);
-      setTimeout(startObserver, 50);
+      setTimeout(() => startObserver(true), 50);
       return result;
     };
     wrapped.__ceChatAdsWrapped = true;
@@ -94,13 +103,14 @@
   }
 
   const timer = setInterval(() => {
-    wrapOpenChat();
-    if (document.getElementById('chat')?.classList.contains('active')) startObserver();
+    const wrapped = wrapOpenChat() || Boolean(window.openChat?.__ceChatAdsWrapped);
+    if (document.getElementById('chat')?.classList.contains('active')) startObserver(false);
+    if (wrapped && observer) clearInterval(timer);
   }, 250);
   setTimeout(() => clearInterval(timer), 20000);
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && document.getElementById('chat')?.classList.contains('active')) startObserver();
+    if (!document.hidden && document.getElementById('chat')?.classList.contains('active')) startObserver(false);
   });
 
   window.ChatEarnChatAds = Object.freeze({
@@ -118,5 +128,6 @@
   });
 
   wrapOpenChat();
+  if (document.getElementById('chat')?.classList.contains('active')) startObserver(false);
   console.info(`[ChatEarn] In-chat ads ${VERSION} loaded`);
 })();
