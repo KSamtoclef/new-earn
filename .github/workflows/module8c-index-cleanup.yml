@@ -1,4 +1,4 @@
-name: Module 8C Index Cleanup
+name: Module 8C Final Runtime Wiring
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  cleanup:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - name: Check out branch
@@ -26,43 +26,57 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Apply final index routes
+      - name: Wire final runtime assets and session limit
         run: |
           node - <<'NODE'
           const fs = require('fs');
-          const path = 'index.html';
-          let html = fs.readFileSync(path, 'utf8');
+
+          const indexPath = 'index.html';
+          let html = fs.readFileSync(indexPath, 'utf8');
           html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
-          html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.3.0');
-          const scripts = [
+          html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.4.0');
+
+          const requiredScripts = [
             '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>',
-            '<script src="./assets/js/chatearn-chat-ads.js?v=8.3.0" defer></script>'
+            '<script src="./assets/js/chatearn-first-session-limit.js?v=8.0.1" defer></script>',
+            '<script src="./assets/js/chatearn-chat-ads.js?v=8.4.0" defer></script>'
           ];
           const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
-          if (!html.includes(marker)) throw new Error('Module 7 marker missing');
-          for (const tag of scripts) {
+          if (!html.includes(marker)) throw new Error('Module 7 marker missing from index.html');
+          for (const tag of requiredScripts) {
             if (!html.includes(tag)) html = html.replace(marker, `${tag}\n${marker}`);
           }
-          fs.writeFileSync(path, html);
+          fs.writeFileSync(indexPath, html);
+
+          const appPath = 'assets/js/chatearn-app.js';
+          let app = fs.readFileSync(appPath, 'utf8');
+          const oldLimit = 'const MIN_WITHDRAW=40000,MAX_EARN=65000,SIGNUP_BONUS=10000;';
+          const newLimit = 'const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;';
+          if (app.includes(oldLimit)) app = app.replace(oldLimit, newLimit);
+          if (!app.includes(newLimit)) throw new Error('Unable to verify the 80000 first-session limit in chatearn-app.js');
+          fs.writeFileSync(appPath, app);
           NODE
 
-      - name: Verify final routes
+      - name: Run final static verification
         run: |
           ! grep -q 'chatearn-v6-2-rewards.css' index.html
           ! grep -q 'chatearn-v6-2-3-final.js' index.html
           grep -q 'chatearn-module7-admin.js' index.html
           grep -q 'chatearn-auth-session-fix.js?v=8.0.4' index.html
           grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
-          grep -q 'chatearn-chat-ads.js?v=8.3.0' index.html
-          grep -q "const VERSION = '8.3.0'" assets/js/chatearn-chat-ads.js
+          grep -q 'chatearn-first-session-limit.js?v=8.0.1' index.html
+          grep -q 'chatearn-chat-ads.js?v=8.4.0' index.html
+          grep -q "const VERSION = '8.4.0'" assets/js/chatearn-chat-ads.js
+          grep -q 'MAX_EARN=80000' assets/js/chatearn-app.js
           grep -q 'Quick earning task' assets/js/chatearn-chat-ads.js
+          grep -q 'First earning session complete' assets/js/chatearn-first-session-limit.js
 
-      - name: Commit index update
+      - name: Commit verified runtime wiring
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
-          git diff --cached --quiet || git commit -m 'Load deterministic native chat tasks'
+          git add index.html assets/js/chatearn-app.js
+          git diff --cached --quiet || git commit -m 'Finalize chat tasks and 80k first earning session'
           git push origin HEAD:module-4-reward-engine
 
-# Updated intentionally to trigger the deterministic native task deployment.
+# Updated intentionally to trigger the final verified runtime wiring.
