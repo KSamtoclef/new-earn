@@ -1,55 +1,62 @@
-/* ChatEarn Module 8 verified auth/session controller. */
+/* ChatEarn Module 8F: stable auth/session controller. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_AUTH_SESSION_FIX_V4__) return;
-  window.__CHAT_EARN_AUTH_SESSION_FIX_V4__ = true;
+  if (window.__CHAT_EARN_AUTH_SESSION_STABLE__) return;
+  window.__CHAT_EARN_AUTH_SESSION_STABLE__ = true;
 
-  const VERSION = '8.0.4';
+  const VERSION = '8.1.0';
   let lastUser = null;
   let resolving = null;
   let lastCheckedAt = 0;
+  let installed = false;
 
-  const client = () => (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
+  const client = () => {
+    try { if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth) return supabaseClient; } catch (_) {}
+    return window.supabaseClient?.auth ? window.supabaseClient : null;
+  };
   const modal = () => document.getElementById('loginModal');
   const hideLogin = () => modal()?.classList.remove('show');
   const showLogin = () => modal()?.classList.add('show');
 
   function syncUser(user) {
-    lastUser = user || null;
-    try { currentUser = lastUser; } catch (_) {}
-    if (lastUser) hideLogin();
-    return lastUser;
+    if (!user) return lastUser;
+    lastUser = user;
+    try { currentUser = user; } catch (_) {}
+    hideLogin();
+    return user;
   }
 
   async function getVerifiedSession(loadAccount = false, force = false) {
-    if (!force && lastUser && Date.now() - lastCheckedAt < 1000) return { user: lastUser };
+    if (!force && lastUser && Date.now() - lastCheckedAt < 10000) return { user:lastUser };
     if (resolving) return resolving;
     resolving = (async () => {
       const supa = client();
-      if (!supa?.auth) return null;
+      if (!supa) return lastUser ? { user:lastUser } : null;
       const { data, error } = await supa.auth.getSession();
       if (error) throw error;
       lastCheckedAt = Date.now();
       const session = data?.session || null;
-      const user = syncUser(session?.user || null);
-      if (user && loadAccount && typeof loadProfile === 'function') {
-        try { await loadProfile({ force: true, retries: 3 }); }
-        catch (error) { console.warn('[ChatEarn] Account profile is still syncing:', error?.message || error); }
+      if (session?.user) syncUser(session.user);
+      if (session?.user && loadAccount && typeof loadProfile === 'function') {
+        try { await loadProfile({ force:true, retries:2 }); } catch (_) {}
       }
-      return session;
+      return session || (lastUser ? { user:lastUser } : null);
     })().finally(() => { resolving = null; });
     return resolving;
   }
 
   async function requireUser() {
     try {
-      const session = await getVerifiedSession(true, true);
-      if (session?.user) { hideLogin(); return session.user; }
+      const session = await getVerifiedSession(false, false);
+      if (session?.user || lastUser) return syncUser(session?.user || lastUser);
+      const forced = await getVerifiedSession(false, true);
+      if (forced?.user) return syncUser(forced.user);
     } catch (error) {
-      console.warn('[ChatEarn] Session verification failed:', error?.message || error);
+      console.warn('[ChatEarn] Session check delayed:', error?.message || error);
+      if (lastUser) return lastUser;
     }
     showLogin();
-    if (typeof showToast === 'function') showToast('Please log in to continue.');
+    window.showToast?.('Please log in to continue.');
     return null;
   }
 
@@ -59,138 +66,89 @@
     const email = document.getElementById('regEmail')?.value.trim() || '';
     const password = document.getElementById('regPass')?.value || '';
     const button = document.getElementById('regSubmitBtn');
-    if (!name) return showToast?.('⚠️ Enter your full name');
-    if (!/^\S+@\S+\.\S+$/.test(email)) return showToast?.('⚠️ Enter a valid email');
-    if (password.length < 6) return showToast?.('⚠️ Password must be at least 6 characters');
-    if (button) { button.disabled = true; button.textContent = 'Creating account…'; }
+    if (!supa) return window.showToast?.('Secure connection is loading. Try again.');
+    if (!name) return window.showToast?.('⚠️ Enter your full name');
+    if (!/^\S+@\S+\.\S+$/.test(email)) return window.showToast?.('⚠️ Enter a valid email');
+    if (password.length < 6) return window.showToast?.('⚠️ Password must be at least 6 characters');
+    if (button) { button.disabled=true; button.textContent='Creating account…'; }
     try {
-      trackEvent?.('registration_attempt', { email_domain: email.split('@')[1] || '' });
-      const signup = await supa.auth.signUp({ email, password, options: { data: { full_name: name } } });
+      const signup = await supa.auth.signUp({ email,password,options:{data:{full_name:name}} });
       if (signup.error) throw signup.error;
-      let session = signup.data?.session || null;
+      let session = signup.data?.session;
       if (!session) {
-        const login = await supa.auth.signInWithPassword({ email, password });
+        const login = await supa.auth.signInWithPassword({ email,password });
         if (login.error) throw login.error;
-        session = login.data?.session || null;
+        session = login.data?.session;
       }
-      const verified = await getVerifiedSession(false, true);
-      if (!session?.user || !verified?.user) throw new Error('No active login session was created.');
-      syncUser(verified.user);
-      try { userName = (verified.user.user_metadata?.full_name || name).split(' ')[0]; } catch (_) {}
-      const dashName = document.getElementById('dashName');
-      if (dashName) dashName.textContent = `${userName || name.split(' ')[0]}!`;
+      if (!session?.user) throw new Error('No active login session was created.');
+      syncUser(session.user);
+      try { userName=(session.user.user_metadata?.full_name||name).split(' ')[0]; } catch (_) {}
       goScreen?.('loading');
-      const profilePromise = typeof loadProfile === 'function' ? loadProfile({ force: true, retries: 4 }).catch(() => null) : Promise.resolve(null);
+      const profilePromise=typeof loadProfile==='function'?loadProfile({force:true,retries:3}).catch(()=>null):Promise.resolve(null);
       runLoadingSequence?.(profilePromise);
-      trackEvent?.('registration_success');
+      window.trackEvent?.('registration_success');
     } catch (error) {
-      trackEvent?.('registration_error', { message: error.message });
-      showToast?.(`⚠️ ${error.message}`);
-      if (typeof currentScreen !== 'undefined' && currentScreen === 'loading') goScreen?.('register');
-    } finally {
-      if (button) { button.disabled = false; button.textContent = 'Create Account & Get ₦10,000 →'; }
-    }
+      window.showToast?.(`⚠️ ${error.message}`);
+      if (typeof currentScreen!=='undefined'&&currentScreen==='loading') goScreen?.('register');
+    } finally { if (button) { button.disabled=false; button.textContent='Create Account & Get ₦10,000 →'; } }
   }
 
   async function verifiedLogin() {
-    const supa = client();
-    const email = document.getElementById('loginEmail')?.value.trim() || '';
-    const password = document.getElementById('loginPass')?.value || '';
-    const button = document.getElementById('loginBtn');
-    const errorNode = document.getElementById('loginError');
+    const supa=client();
+    const email=document.getElementById('loginEmail')?.value.trim()||'';
+    const password=document.getElementById('loginPass')?.value||'';
+    const button=document.getElementById('loginBtn');
+    const errorNode=document.getElementById('loginError');
     errorNode?.classList.remove('show');
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      if (errorNode) { errorNode.textContent = 'Enter a valid email address.'; errorNode.classList.add('show'); }
-      return;
-    }
-    if (!password) {
-      if (errorNode) { errorNode.textContent = 'Enter your password.'; errorNode.classList.add('show'); }
-      return;
-    }
-    if (button) { button.disabled = true; button.textContent = 'Logging in…'; }
+    if (!supa) return window.showToast?.('Secure connection is loading. Try again.');
+    if (!/^\S+@\S+\.\S+$/.test(email)||!password) return;
+    if (button) { button.disabled=true; button.textContent='Logging in…'; }
     try {
-      const login = await supa.auth.signInWithPassword({ email, password });
+      const login=await supa.auth.signInWithPassword({email,password});
       if (login.error) throw login.error;
-      const session = await getVerifiedSession(false, true);
-      if (!session?.user) throw new Error('Login completed without an active session. Please try again.');
-      syncUser(session.user);
-      try { userName = (session.user.user_metadata?.full_name || email.split('@')[0] || 'User').split(' ')[0]; } catch (_) {}
+      if (!login.data?.session?.user) throw new Error('Login completed without an active session.');
+      syncUser(login.data.session.user);
       hideLogin();
-      const dashName = document.getElementById('dashName');
-      if (dashName) dashName.textContent = `${userName || 'User'}!`;
       goScreen?.('dashboard');
-      if (typeof loadProfile === 'function') loadProfile({ force: true, retries: 3 }).then(() => updateBalance?.()).catch(() => showToast?.('Logged in. Account details are still syncing.'));
-      trackEvent?.('login_success');
+      if (typeof loadProfile==='function') loadProfile({force:true,retries:2}).then(()=>updateBalance?.()).catch(()=>null);
     } catch (error) {
-      if (errorNode) { errorNode.textContent = error.message || 'Unable to log in.'; errorNode.classList.add('show'); }
-      trackEvent?.('login_error', { message: error.message });
-    } finally {
-      if (button) { button.disabled = false; button.textContent = 'Log In & Continue →'; }
-    }
+      if (errorNode) { errorNode.textContent=error.message||'Unable to log in.'; errorNode.classList.add('show'); }
+    } finally { if (button) { button.disabled=false; button.textContent='Log In & Continue →'; } }
   }
 
   function wrapProtected(name) {
-    const original = window[name];
-    if (typeof original !== 'function' || original.__ceVerifiedAuthWrapped) return false;
-    const wrapped = async function (...args) {
-      const user = await requireUser();
-      if (!user) return false;
-      return original.apply(this, args);
-    };
-    wrapped.__ceVerifiedAuthWrapped = true;
-    wrapped.__ceVerifiedAuthOriginal = original;
-    window[name] = wrapped;
-    return true;
-  }
-
-  function guardLoginModal() {
-    const node = modal();
-    if (!node || node.dataset.ceAuthObserved === '1') return;
-    node.dataset.ceAuthObserved = '1';
-    new MutationObserver(() => {
-      if (!node.classList.contains('show')) return;
-      getVerifiedSession(false, true).then(session => {
-        if (session?.user) hideLogin();
-      }).catch(() => null);
-    }).observe(node, { attributes: true, attributeFilter: ['class', 'style'] });
+    const original=window[name];
+    if (typeof original!=='function'||original.__ceStableAuthWrapped) return;
+    const wrapped=async function(...args){const user=await requireUser();if(!user)return false;return original.apply(this,args)};
+    wrapped.__ceStableAuthWrapped=true;
+    wrapped.__ceStableAuthOriginal=original;
+    window[name]=wrapped;
   }
 
   function install() {
-    window.doRegister = verifiedRegister;
-    window.doLogin = verifiedLogin;
+    window.doRegister=verifiedRegister;
+    window.doLogin=verifiedLogin;
     wrapProtected('openChat');
     wrapProtected('sendMsg');
-    guardLoginModal();
+    installed=true;
   }
 
-  client()?.auth?.onAuthStateChange?.((_event, session) => {
-    lastCheckedAt = Date.now();
-    syncUser(session?.user || null);
-  });
+  function boot() {
+    install();
+    const supa=client();
+    supa?.auth?.onAuthStateChange?.((event,session)=>{
+      lastCheckedAt=Date.now();
+      if (session?.user) syncUser(session.user);
+      else if (event==='SIGNED_OUT') {
+        lastUser=null;
+        try { currentUser=null; } catch (_) {}
+      }
+    });
+    getVerifiedSession(false,true).catch(()=>null);
+  }
 
-  const timer = setInterval(install, 100);
-  setTimeout(() => clearInterval(timer), 20000);
-  install();
-
-  window.ChatEarnAuthSessionDiagnostic = async () => {
-    let session = null, error = null;
-    try { session = await getVerifiedSession(false, true); } catch (e) { error = e?.message || String(e); }
-    let pageUser = null;
-    try { pageUser = currentUser || null; } catch (_) {}
-    return {
-      version: VERSION,
-      sessionUserId: session?.user?.id || null,
-      pageUserId: pageUser?.id || null,
-      synchronized: Boolean(session?.user?.id && session.user.id === pageUser?.id),
-      registrationControllerInstalled: window.doRegister === verifiedRegister,
-      loginControllerInstalled: window.doLogin === verifiedLogin,
-      openChatGuardInstalled: Boolean(window.openChat?.__ceVerifiedAuthWrapped),
-      sendGuardInstalled: Boolean(window.sendMsg?.__ceVerifiedAuthWrapped),
-      modalObserverInstalled: modal()?.dataset.ceAuthObserved === '1',
-      error
-    };
-  };
-
-  getVerifiedSession(false, true).catch(() => null);
-  console.info(`[ChatEarn] Verified auth/session controller ${VERSION} loaded`);
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
+  window.addEventListener('pageshow',()=>getVerifiedSession(false,false).catch(()=>null));
+  window.ChatEarnAuthSessionDiagnostic=async()=>({version:VERSION,installed,lastUserId:lastUser?.id||null,session:(await getVerifiedSession(false,true).catch(()=>null))?.user?.id||null});
+  console.info(`[ChatEarn] Stable auth/session controller ${VERSION} loaded`);
 })();
