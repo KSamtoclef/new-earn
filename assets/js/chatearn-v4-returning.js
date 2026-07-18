@@ -1,10 +1,10 @@
-/* ChatEarn Module 6C: canonical withdrawal frontend integration.
+/* ChatEarn Module 6D: canonical withdrawal frontend integration.
  * Temporary filename retained until the final asset rename pass.
  */
 (() => {
   'use strict';
 
-  const VERSION = '6C.1';
+  const VERSION = '6D.1';
   const state = {
     portal: null,
     accounts: [],
@@ -81,12 +81,52 @@
   }
 
   function removeLegacyAccountInputs() {
-    const accountNumberGroup = byId('wdAccNo')?.closest('.form-group');
-    const accountNameGroup = byId('wdAccName')?.closest('.form-group');
-    const verifyStatus = byId('bankVerifyStatus');
-    accountNumberGroup?.remove();
-    accountNameGroup?.remove();
-    verifyStatus?.remove();
+    byId('wdAccNo')?.closest('.form-group')?.remove();
+    byId('wdAccName')?.closest('.form-group')?.remove();
+    byId('bankVerifyStatus')?.remove();
+  }
+
+  function retireLegacyRewardAsset() {
+    document.querySelectorAll('script[src*="chatearn-v6-2-3-final.js"]').forEach(node => {
+      node.dataset.retiredBy = VERSION;
+      node.remove();
+    });
+    document.querySelectorAll('link[href*="chatearn-v6-2-rewards.css"]').forEach(node => {
+      node.dataset.retiredBy = VERSION;
+      node.remove();
+    });
+  }
+
+  function rebuildWithdrawalMarkup() {
+    const body = document.querySelector('#withdraw .wd-body');
+    if (!body || body.dataset.canonicalV5 === '1') return;
+
+    const amount = body.querySelector('.wd-amount-display');
+    const accountGroup = body.querySelector('.bank-options')?.closest('.form-group');
+    const submit = body.querySelector('.btn-place-wd');
+    const secureNotice = [...body.children].find(node =>
+      node.matches?.('div') && /secure withdrawal/i.test(node.textContent || '')
+    );
+
+    removeLegacyAccountInputs();
+
+    if (accountGroup) {
+      const label = accountGroup.querySelector('.form-label');
+      if (label) label.textContent = 'Verified payout account';
+      accountGroup.querySelectorAll('[onclick]').forEach(node => node.removeAttribute('onclick'));
+    }
+
+    if (secureNotice) {
+      secureNotice.innerHTML = '🔒 <strong>Secure withdrawal.</strong> Only verified payout accounts are shown. Your complete account number is never displayed on this page.';
+    }
+
+    if (submit) {
+      submit.removeAttribute('onclick');
+      submit.type = 'button';
+    }
+
+    body.dataset.canonicalV5 = '1';
+    amount?.setAttribute('aria-live', 'polite');
   }
 
   function ensureStatusPanel() {
@@ -96,9 +136,10 @@
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'withdrawalPortalStatus';
+      panel.setAttribute('role', 'status');
+      panel.setAttribute('aria-live', 'polite');
       panel.style.cssText = 'margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card2);font-size:12px;line-height:1.55;color:var(--text);';
-      const amount = body.querySelector('.wd-amount-display');
-      amount?.insertAdjacentElement('afterend', panel);
+      body.querySelector('.wd-amount-display')?.insertAdjacentElement('afterend', panel);
     }
     return panel;
   }
@@ -119,7 +160,7 @@
 
     container.innerHTML = state.accounts.map(account => {
       const selected = account.id === state.selectedAccountId;
-      return `<button type="button" class="bank-option${selected ? ' selected' : ''}" data-payout-account-id="${safe(account.id)}" style="text-align:left;cursor:pointer;">
+      return `<button type="button" class="bank-option${selected ? ' selected' : ''}" data-payout-account-id="${safe(account.id)}" aria-pressed="${selected}" style="text-align:left;cursor:pointer;">
         <div class="bo-name" style="font-size:15px;font-weight:900;">${safe(account.provider || account.bank_name || 'Payout account')}</div>
         <div style="font-size:11px;color:var(--text);margin-top:3px;">${safe(account.masked_account || (account.account_last4 ? `•••• ${account.account_last4}` : 'Verified account'))}</div>
       </button>`;
@@ -144,7 +185,7 @@
     const earningsNode = byId('earnPageAmount');
     if (earningsNode) earningsNode.textContent = Number(available).toLocaleString('en-NG');
 
-    removeLegacyAccountInputs();
+    rebuildWithdrawalMarkup();
     renderAccounts();
 
     const statusPanel = ensureStatusPanel();
@@ -195,7 +236,7 @@
       renderPortal();
       return state.portal;
     } catch (error) {
-      console.error('[ChatEarn 6C] withdrawal portal load failed', error);
+      console.error('[ChatEarn 6D] withdrawal portal load failed', error);
       const statusPanel = ensureStatusPanel();
       if (statusPanel) statusPanel.textContent = 'Withdrawal information could not be loaded. Please check your connection and try again.';
       toast(error?.message || 'Unable to load withdrawal details.', 'error');
@@ -276,7 +317,7 @@
       const bankNode = byId('ppBank');
       if (bankNode && account) bankNode.textContent = accountLabel(account);
     } catch (error) {
-      console.error('[ChatEarn 6C] withdrawal submit failed', error);
+      console.error('[ChatEarn 6D] withdrawal submit failed', error);
       toast(error?.message || 'Unable to submit withdrawal.', 'error');
       renderPortal();
     } finally {
@@ -286,7 +327,7 @@
 
   const previousGoScreen = typeof goScreen === 'function' ? goScreen : null;
   if (previousGoScreen) {
-    window.goScreen = function module6CGoScreen(id) {
+    window.goScreen = function module6DGoScreen(id) {
       const result = previousGoScreen(id);
       if (id === 'withdraw' || id === 'earnings') void loadPortal(id === 'withdraw');
       return result;
@@ -310,18 +351,18 @@
         'chatearn_submit_withdrawal_v5'
       ],
       legacyRawAccountInputsPresent: Boolean(byId('wdAccNo') || byId('wdAccName')),
+      legacyRewardAssetPresent: Boolean(document.querySelector('script[src*="chatearn-v6-2-3-final.js"]')),
+      canonicalMarkupReady: document.querySelector('#withdraw .wd-body')?.dataset.canonicalV5 === '1',
       selectedAccountMasked: state.accounts.some(a => a.id === state.selectedAccountId),
       activeWithdrawal: Boolean(activeWithdrawal(state.portal || {}))
     })
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    removeLegacyAccountInputs();
+    retireLegacyRewardAsset();
+    rebuildWithdrawalMarkup();
     const submit = document.querySelector('#withdraw .btn-place-wd');
-    if (submit) {
-      submit.removeAttribute('onclick');
-      submit.addEventListener('click', submitWithdrawal);
-    }
+    if (submit) submit.addEventListener('click', submitWithdrawal);
   }, { once: true });
 
   console.info(`[ChatEarn] Module ${VERSION} canonical withdrawal controller loaded`);
