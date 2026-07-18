@@ -33,11 +33,14 @@ jobs:
           const path = 'index.html';
           let html = fs.readFileSync(path, 'utf8');
           html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
-          const cta = '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>';
-          if (!html.includes(cta)) {
-            const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
-            if (!html.includes(marker)) throw new Error('Module 7 marker missing');
-            html = html.replace(marker, `${cta}\n${marker}`);
+          const scripts = [
+            '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>',
+            '<script src="./assets/js/chatearn-chat-ads.js?v=8.1.0" defer></script>'
+          ];
+          const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
+          if (!html.includes(marker)) throw new Error('Module 7 marker missing');
+          for (const tag of scripts) {
+            if (!html.includes(tag)) html = html.replace(marker, `${tag}\n${marker}`);
           }
           fs.writeFileSync(path, html);
           NODE
@@ -49,13 +52,15 @@ jobs:
           grep -q 'chatearn-module7-admin.js' index.html
           grep -q 'chatearn-auth-session-fix.js?v=8.0.4' index.html
           grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
+          grep -q 'chatearn-chat-ads.js?v=8.1.0' index.html
+          grep -q "const VERSION = '8.1.0'" assets/js/chatearn-chat-ads.js
 
       - name: Commit index update
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Show withdrawal action inside chat at threshold'
+          git diff --cached --quiet || git commit -m 'Load deterministic in-chat ads'
           git push origin HEAD:module-4-reward-engine
 
-# Updated intentionally to trigger the in-chat withdrawal CTA deployment.
+# Updated intentionally to trigger the in-chat ads deployment.
