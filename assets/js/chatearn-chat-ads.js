@@ -1,133 +1,169 @@
-/* ChatEarn Module 8: deterministic in-chat offer cards for new and returning users. */
+/* ChatEarn Module 8: native in-chat sponsored tasks for new and returning users. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_CHAT_ADS__) return;
-  window.__CHAT_EARN_CHAT_ADS__ = true;
+  if (window.__CHAT_EARN_CHAT_ADS_V82__) return;
+  window.__CHAT_EARN_CHAT_ADS_V82__ = true;
 
-  const VERSION = '8.1.1';
+  const VERSION = '8.2.0';
   const EVERY = 3;
-  let earnedMessages = 0;
-  let lastShownAt = 0;
+  let paidReplies = 0;
+  let lastRenderedReply = 0;
+  let lastRenderedAt = 0;
+  let currentPartnerKey = '';
   let observer = null;
   let observedBody = null;
 
-  const chatBody = () => document.getElementById('chatBody');
-  const safeTrack = (name, metadata = {}) => {
-    try { if (typeof trackEvent === 'function') trackEvent(name, metadata); } catch (_) {}
+  const body = () => document.getElementById('chatBody');
+  const isChatActive = () => document.getElementById('chat')?.classList.contains('active');
+  const partnerKey = () => {
+    try { return currentChatUser?.name || ''; } catch (_) { return ''; }
+  };
+  const track = (name, metadata = {}) => {
+    try { if (typeof window.trackEvent === 'function') window.trackEvent(name, metadata); } catch (_) {}
   };
 
-  function openOffer(button) {
-    safeTrack('chat_ad_clicked', { source: 'chat_inline', message_count: earnedMessages });
+  function openTask(button) {
+    track('chat_sponsored_task_clicked', { source: 'chat_inline', paid_replies: paidReplies, partner: partnerKey() });
     if (typeof window.ceV42OpenNextOffer === 'function') {
-      window.ceV42OpenNextOffer('chat_inline', button);
+      window.ceV42OpenNextOffer('chat_inline_task', button);
       return;
     }
-    const fallback = document.querySelector('a.ce-offer-active[href], a[data-offer-placement][href], a[href*="jikgykm.com"], a[href*="effectivecpmnetwork.com"], a[href*="omg10.com"]');
+    const fallback = document.querySelector('a.ce-offer-active[href],a[data-offer-placement][href],a[href*="jikgykm.com"],a[href*="effectivecpmnetwork.com"],a[href*="omg10.com"]');
     if (fallback?.href) window.open(fallback.href, '_blank', 'noopener');
-    else if (typeof showToast === 'function') showToast('A fresh sponsored offer is loading. Please try again.');
+    else window.showToast?.('Your next earning task is loading. Please tap again.');
   }
 
-  function renderAd() {
-    const body = chatBody();
-    if (!body) return;
+  function renderTask(force = false) {
+    const chat = body();
+    if (!chat || !isChatActive()) return false;
     const now = Date.now();
-    if (now - lastShownAt < 5000) return;
-    lastShownAt = now;
+    if (!force && (paidReplies <= lastRenderedReply || now - lastRenderedAt < 2500)) return false;
+
+    const old = chat.querySelector('.ce-chat-native-task[data-active="1"]');
+    if (old) old.dataset.active = '0';
 
     const card = document.createElement('div');
-    card.className = 'ce-chat-inline-ad';
+    card.className = 'ce-chat-native-task';
+    card.dataset.active = '1';
+    card.dataset.reply = String(paidReplies);
     card.setAttribute('role', 'complementary');
-    card.style.cssText = 'margin:14px 0;padding:15px;border:1px solid rgba(0,200,83,.38);border-radius:16px;background:linear-gradient(135deg,rgba(0,200,83,.14),rgba(255,255,255,.035));box-shadow:0 8px 26px rgba(0,0,0,.18);';
+    card.style.cssText = 'margin:16px 0;padding:14px;border:1px solid rgba(0,200,83,.42);border-radius:18px;background:#171b18;box-shadow:0 10px 28px rgba(0,0,0,.22);';
     card.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:11px;">
-        <div style="font-size:26px;line-height:1;">🎁</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;letter-spacing:1.1px;text-transform:uppercase;color:#00e676;font-weight:900;margin-bottom:4px;">Sponsored reward</div>
-          <div style="font-size:15px;font-weight:900;color:var(--text,#fff);">Unlock a fresh earning opportunity</div>
-          <div style="font-size:12px;line-height:1.5;color:var(--muted,#aaa);margin-top:4px;">Open the offer, then return here and continue chatting.</div>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="width:42px;height:42px;border-radius:14px;background:rgba(0,200,83,.14);display:flex;align-items:center;justify-content:center;font-size:22px;flex:none;">⚡</div>
+        <div style="min-width:0;flex:1;">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+            <div style="font-size:15px;font-weight:900;color:#fff;">Quick earning task</div>
+            <span style="font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:#8b9a90;border:1px solid #334039;border-radius:999px;padding:3px 7px;white-space:nowrap;">Sponsored</span>
+          </div>
+          <div style="font-size:12px;line-height:1.45;color:#aeb8b1;margin-top:5px;">Open this short task, then return here to continue your conversation and earnings.</div>
         </div>
       </div>
-      <button type="button" style="width:100%;margin-top:12px;padding:12px 14px;border:0;border-radius:12px;background:#00c853;color:#07130b;font-weight:900;font-size:14px;cursor:pointer;">Open sponsored offer →</button>`;
-    const button = card.querySelector('button');
-    button.addEventListener('click', () => openOffer(button));
-    body.appendChild(card);
-    body.scrollTop = body.scrollHeight;
-    safeTrack('chat_ad_impression', { source: 'chat_inline', message_count: earnedMessages });
+      <button type="button" style="width:100%;margin-top:12px;padding:12px 14px;border:0;border-radius:13px;background:#00c853;color:#06120a;font-size:14px;font-weight:900;cursor:pointer;">Start quick task →</button>`;
+    card.querySelector('button').addEventListener('click', event => openTask(event.currentTarget));
+    chat.appendChild(card);
+    chat.scrollTop = chat.scrollHeight;
+    lastRenderedReply = paidReplies;
+    lastRenderedAt = now;
+    track('chat_sponsored_task_impression', { source: 'chat_inline', paid_replies: paidReplies, partner: partnerKey() });
+    return true;
   }
 
-  function countEarnedNodes(node) {
+  function registerPaidReply(source = 'event') {
+    if (!isChatActive()) return;
+    const key = partnerKey();
+    if (key !== currentPartnerKey) {
+      currentPartnerKey = key;
+      paidReplies = 0;
+      lastRenderedReply = 0;
+    }
+    paidReplies += 1;
+    if (paidReplies % EVERY === 0) setTimeout(() => renderTask(), 180);
+    track('chat_paid_reply_counted', { source, paid_replies: paidReplies, partner: key });
+  }
+
+  function wrapTrackEvent() {
+    const original = window.trackEvent;
+    if (typeof original !== 'function' || original.__ceChatTaskWrapped) return false;
+    const wrapped = function (name, metadata = {}) {
+      const result = original.apply(this, arguments);
+      if (name === 'user_message_sent') registerPaidReply('track_event');
+      return result;
+    };
+    wrapped.__ceChatTaskWrapped = true;
+    wrapped.__ceChatTaskOriginal = original;
+    window.trackEvent = wrapped;
+    return true;
+  }
+
+  function countEarnNodes(node) {
     if (!(node instanceof Element)) return 0;
-    let count = node.matches('.msg-earn') ? 1 : 0;
-    count += node.querySelectorAll?.('.msg-earn').length || 0;
-    return count;
+    return (node.matches('.msg-earn') ? 1 : 0) + (node.querySelectorAll?.('.msg-earn').length || 0);
   }
 
-  function startObserver(resetCounter = false) {
-    const body = chatBody();
-    if (!body) return false;
-    if (observer && observedBody === body) return true;
-
+  function startFallbackObserver() {
+    const chat = body();
+    if (!chat) return false;
+    if (observer && observedBody === chat) return true;
     observer?.disconnect();
-    observedBody = body;
-    if (resetCounter) earnedMessages = 0;
-
+    observedBody = chat;
     observer = new MutationObserver(records => {
       let added = 0;
-      records.forEach(record => record.addedNodes.forEach(node => { added += countEarnedNodes(node); }));
+      records.forEach(record => record.addedNodes.forEach(node => { added += countEarnNodes(node); }));
       if (!added) return;
-      for (let i = 0; i < added; i += 1) {
-        earnedMessages += 1;
-        if (earnedMessages % EVERY === 0) renderAd();
+      // Only use DOM counting when the event wrapper did not count the same reply.
+      if (!window.trackEvent?.__ceChatTaskWrapped) {
+        for (let i = 0; i < added; i += 1) registerPaidReply('dom_fallback');
       }
     });
-    observer.observe(body, { childList: true, subtree: true });
+    observer.observe(chat, { childList: true, subtree: true });
     return true;
   }
 
   function wrapOpenChat() {
     const original = window.openChat;
-    if (typeof original !== 'function' || original.__ceChatAdsWrapped) return false;
+    if (typeof original !== 'function' || original.__ceChatTaskOpenWrapped) return false;
     const wrapped = async function (...args) {
-      earnedMessages = 0;
-      observedBody = null;
-      observer?.disconnect();
-      observer = null;
       const result = await original.apply(this, args);
-      setTimeout(() => startObserver(true), 50);
+      currentPartnerKey = partnerKey();
+      paidReplies = 0;
+      lastRenderedReply = 0;
+      setTimeout(startFallbackObserver, 80);
       return result;
     };
-    wrapped.__ceChatAdsWrapped = true;
-    wrapped.__ceChatAdsOriginal = original;
+    wrapped.__ceChatTaskOpenWrapped = true;
+    wrapped.__ceChatTaskOpenOriginal = original;
     window.openChat = wrapped;
     return true;
   }
 
-  const timer = setInterval(() => {
-    const wrapped = wrapOpenChat() || Boolean(window.openChat?.__ceChatAdsWrapped);
-    if (document.getElementById('chat')?.classList.contains('active')) startObserver(false);
-    if (wrapped && observer) clearInterval(timer);
-  }, 250);
-  setTimeout(() => clearInterval(timer), 20000);
-
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && document.getElementById('chat')?.classList.contains('active')) startObserver(false);
-  });
+  const installTimer = setInterval(() => {
+    wrapTrackEvent();
+    wrapOpenChat();
+    if (isChatActive()) startFallbackObserver();
+    if (window.trackEvent?.__ceChatTaskWrapped && window.openChat?.__ceChatTaskOpenWrapped && observer) clearInterval(installTimer);
+  }, 100);
+  setTimeout(() => clearInterval(installTimer), 20000);
 
   window.ChatEarnChatAds = Object.freeze({
     version: VERSION,
     interval: EVERY,
-    showNow: renderAd,
+    showNow: () => renderTask(true),
     diagnostic: () => ({
       version: VERSION,
       every: EVERY,
-      earnedMessages,
+      paidReplies,
+      lastRenderedReply,
+      active: isChatActive(),
+      eventHookInstalled: Boolean(window.trackEvent?.__ceChatTaskWrapped),
+      openChatHookInstalled: Boolean(window.openChat?.__ceChatTaskOpenWrapped),
       observerActive: Boolean(observer),
-      routerAvailable: typeof window.ceV42OpenNextOffer === 'function',
-      openChatWrapped: Boolean(window.openChat?.__ceChatAdsWrapped)
+      routerAvailable: typeof window.ceV42OpenNextOffer === 'function'
     })
   });
 
+  wrapTrackEvent();
   wrapOpenChat();
-  if (document.getElementById('chat')?.classList.contains('active')) startObserver(false);
-  console.info(`[ChatEarn] In-chat ads ${VERSION} loaded`);
+  if (isChatActive()) startFallbackObserver();
+  console.info(`[ChatEarn] Native sponsored tasks ${VERSION} loaded`);
 })();
