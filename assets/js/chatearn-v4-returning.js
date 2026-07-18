@@ -1,28 +1,28 @@
-/* ChatEarn Module 6E: canonical withdrawal frontend integration.
- * Temporary filename retained until the final asset rename pass.
+/* ChatEarn withdrawal portal state provider.
+ * The historical filename is retained temporarily so index.html does not change during cleanup.
+ * This module owns portal/account reads only. The direct withdrawal controller owns the UI and submission.
  */
 (() => {
   'use strict';
+  if (window.__CHAT_EARN_WITHDRAWAL_PORTAL_PROVIDER__) return;
+  window.__CHAT_EARN_WITHDRAWAL_PORTAL_PROVIDER__ = true;
 
-  const VERSION = '6E.1';
+  const VERSION = '7.0.0-provider';
   const state = {
     portal: null,
     accounts: [],
-    selectedAccountId: null,
     loading: false,
-    submitting: false,
     initialized: false,
-    lastLoadedAt: 0
+    lastLoadedAt: 0,
+    lastError: null
   };
 
-  const byId = id => document.getElementById(id);
-  const fmt = value => '₦' + Number(value || 0).toLocaleString('en-NG');
-  const text = value => String(value ?? '');
-  const safe = value => text(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-
   function client() {
-    if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) return supabaseClient;
-    throw new Error('Supabase client is unavailable');
+    try {
+      if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) return supabaseClient;
+    } catch (_) {}
+    if (window.supabaseClient?.rpc) return window.supabaseClient;
+    throw new Error('connection_unavailable');
   }
 
   function unwrap(data) {
@@ -30,193 +30,12 @@
     return data.data && typeof data.data === 'object' ? data.data : data;
   }
 
-  function toast(message, kind = 'info') {
-    if (typeof showToast === 'function') {
-      showToast(message);
-      return;
-    }
-    const node = byId('toast');
-    if (!node) return;
-    node.textContent = message;
-    node.dataset.kind = kind;
-    node.classList.add('show');
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => node.classList.remove('show'), 3500);
-  }
-
-  function accountLabel(account) {
-    const provider = account.provider || account.bank_name || 'Payout account';
-    const masked = account.masked_account || (account.account_last4 ? `•••• ${account.account_last4}` : 'Verified');
-    return `${provider} · ${masked}`;
-  }
-
-  function portalWallet(portal) {
-    return portal.wallet || portal.balance || {};
-  }
-
-  function availableBalance(portal) {
-    const wallet = portalWallet(portal);
-    return Number(wallet.available_balance ?? wallet.available ?? portal.available_balance ?? 0);
-  }
-
-  function minimumAmount(portal) {
-    const eligibility = portal.eligibility || portal.progress || {};
-    return Number(
-      eligibility.minimum_amount ?? eligibility.assigned_threshold ??
-      portal.minimum_amount ?? portal.withdrawal_threshold ?? 0
-    );
-  }
-
-  function activeWithdrawal(portal) {
-    return portal.active_withdrawal || portal.withdrawal || null;
-  }
-
-  function eligibilityMessage(portal) {
-    const eligibility = portal.eligibility || portal.progress || {};
-    if (eligibility.message) return text(eligibility.message);
-    if (eligibility.reason) return text(eligibility.reason);
-    const available = availableBalance(portal);
-    const minimum = minimumAmount(portal);
-    if (minimum && available < minimum) return `You need ${fmt(minimum - available)} more to reach the withdrawal minimum.`;
-    return 'Your withdrawal eligibility is checked securely by ChatEarn.';
-  }
-
-  function removeLegacyAccountInputs() {
-    byId('wdAccNo')?.closest('.form-group')?.remove();
-    byId('wdAccName')?.closest('.form-group')?.remove();
-    byId('bankVerifyStatus')?.remove();
-  }
-
-  function retireLegacyRewardAsset() {
-    document.querySelectorAll('script[src*="chatearn-v6-2-3-final.js"]').forEach(node => node.remove());
-    document.querySelectorAll('link[href*="chatearn-v6-2-rewards.css"]').forEach(node => node.remove());
-  }
-
-  function rebuildWithdrawalMarkup() {
-    const body = document.querySelector('#withdraw .wd-body');
-    if (!body || body.dataset.canonicalV5 === '1') return;
-
-    const amount = body.querySelector('.wd-amount-display');
-    const accountGroup = body.querySelector('.bank-options')?.closest('.form-group');
-    const submit = body.querySelector('.btn-place-wd');
-    const secureNotice = [...body.children].find(node =>
-      node.matches?.('div') && /secure withdrawal/i.test(node.textContent || '')
-    );
-
-    removeLegacyAccountInputs();
-
-    if (accountGroup) {
-      const label = accountGroup.querySelector('.form-label');
-      if (label) label.textContent = 'Verified payout account';
-      accountGroup.querySelectorAll('[onclick]').forEach(node => node.removeAttribute('onclick'));
-    }
-
-    if (secureNotice) {
-      secureNotice.innerHTML = '🔒 <strong>Secure withdrawal.</strong> Only verified payout accounts are shown. Your complete account number is never displayed on this page.';
-    }
-
-    if (submit) {
-      submit.removeAttribute('onclick');
-      submit.type = 'button';
-    }
-
-    body.dataset.canonicalV5 = '1';
-    amount?.setAttribute('aria-live', 'polite');
-  }
-
-  function ensureStatusPanel() {
-    const body = document.querySelector('#withdraw .wd-body');
-    if (!body) return null;
-    let panel = byId('withdrawalPortalStatus');
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.id = 'withdrawalPortalStatus';
-      panel.setAttribute('role', 'status');
-      panel.setAttribute('aria-live', 'polite');
-      panel.style.cssText = 'margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card2);font-size:12px;line-height:1.55;color:var(--text);';
-      body.querySelector('.wd-amount-display')?.insertAdjacentElement('afterend', panel);
-    }
-    return panel;
-  }
-
-  function renderAccounts() {
-    const container = document.querySelector('#withdraw .bank-options');
-    if (!container) return;
-
-    if (!state.accounts.length) {
-      container.innerHTML = '<div style="width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;">No verified payout account is available. Add and verify an account before requesting withdrawal.</div>';
-      state.selectedAccountId = null;
-      return;
-    }
-
-    if (!state.selectedAccountId || !state.accounts.some(a => a.id === state.selectedAccountId)) {
-      state.selectedAccountId = (state.accounts.find(a => a.is_default) || state.accounts[0]).id;
-    }
-
-    container.innerHTML = state.accounts.map(account => {
-      const selected = account.id === state.selectedAccountId;
-      return `<button type="button" class="bank-option${selected ? ' selected' : ''}" data-payout-account-id="${safe(account.id)}" aria-pressed="${selected}" style="text-align:left;cursor:pointer;">
-        <div class="bo-name" style="font-size:15px;font-weight:900;">${safe(account.provider || account.bank_name || 'Payout account')}</div>
-        <div style="font-size:11px;color:var(--text);margin-top:3px;">${safe(account.masked_account || (account.account_last4 ? `•••• ${account.account_last4}` : 'Verified account'))}</div>
-      </button>`;
-    }).join('');
-
-    container.querySelectorAll('[data-payout-account-id]').forEach(button => {
-      button.addEventListener('click', () => {
-        state.selectedAccountId = button.dataset.payoutAccountId;
-        renderAccounts();
-      });
-    });
-  }
-
-  function renderPortal() {
-    const portal = state.portal || {};
-    const available = availableBalance(portal);
-    const minimum = minimumAmount(portal);
-    const active = activeWithdrawal(portal);
-
-    const amountNode = byId('wdAmount');
-    if (amountNode) amountNode.textContent = fmt(available);
-    const earningsNode = byId('earnPageAmount');
-    if (earningsNode) earningsNode.textContent = Number(available).toLocaleString('en-NG');
-
-    rebuildWithdrawalMarkup();
-    renderAccounts();
-
-    const statusPanel = ensureStatusPanel();
-    if (statusPanel) {
-      if (active) {
-        const label = active.ui_label || active.status_label || active.status || 'Pending';
-        const reference = active.public_reference ? `<br>Reference: <strong>${safe(active.public_reference)}</strong>` : '';
-        statusPanel.innerHTML = `<strong>${safe(label)}</strong><br>${safe(active.ui_message || active.message || 'Your withdrawal request is being processed.')}${reference}`;
-      } else {
-        statusPanel.innerHTML = `<strong>Withdrawal status</strong><br>${safe(eligibilityMessage(portal))}`;
-      }
-    }
-
-    const submit = document.querySelector('#withdraw .btn-place-wd');
-    if (submit) {
-      submit.removeAttribute('onclick');
-      if (active) {
-        submit.disabled = true;
-        submit.textContent = `${active.ui_label || active.status_label || active.status || 'Withdrawal pending'}`;
-      } else if (!state.accounts.length) {
-        submit.disabled = true;
-        submit.textContent = 'Verified payout account required';
-      } else if (minimum && available < minimum) {
-        submit.disabled = true;
-        submit.textContent = `Minimum withdrawal is ${fmt(minimum)}`;
-      } else {
-        submit.disabled = false;
-        submit.textContent = `Withdraw ${fmt(available)} →`;
-      }
-    }
-  }
-
   async function loadPortal(force = false) {
     if (state.loading) return state.portal;
     if (!force && state.portal && Date.now() - state.lastLoadedAt < 10000) return state.portal;
+
     state.loading = true;
+    state.lastError = null;
     try {
       const [{ data: portalData, error: portalError }, { data: accountData, error: accountError }] = await Promise.all([
         client().rpc('chatearn_get_withdrawal_portal_v5'),
@@ -224,174 +43,64 @@
       ]);
       if (portalError) throw portalError;
       if (accountError) throw accountError;
+
       state.portal = unwrap(portalData);
       const accountPayload = unwrap(accountData);
-      state.accounts = Array.isArray(accountPayload) ? accountPayload : (accountPayload.accounts || accountPayload.payout_accounts || []);
+      state.accounts = Array.isArray(accountPayload)
+        ? accountPayload
+        : (accountPayload.accounts || accountPayload.payout_accounts || []);
       state.lastLoadedAt = Date.now();
-      renderPortal();
+      window.dispatchEvent(new CustomEvent('chatearn:withdrawal-portal-updated', {
+        detail: { portal: state.portal, accounts: [...state.accounts] }
+      }));
       return state.portal;
     } catch (error) {
-      console.error('[ChatEarn 6E] withdrawal portal load failed', error);
-      const statusPanel = ensureStatusPanel();
-      if (statusPanel) statusPanel.textContent = 'Withdrawal information could not be loaded. Please check your connection and try again.';
-      toast(error?.message || 'Unable to load withdrawal details.', 'error');
-      throw error;
+      state.lastError = error?.message || String(error);
+      console.warn('[ChatEarn] withdrawal portal refresh failed', state.lastError);
+      return null;
     } finally {
       state.loading = false;
     }
   }
 
-  function loadPortalSafely(force = false) {
-    return loadPortal(force).catch(() => null);
-  }
-
-  function makeIdempotencyKey() {
-    const existing = sessionStorage.getItem('ce_withdrawal_idempotency_key');
-    if (existing) return existing;
-    const key = `withdrawal-${crypto.randomUUID()}`;
-    sessionStorage.setItem('ce_withdrawal_idempotency_key', key);
-    return key;
-  }
-
-  async function submitWithdrawal() {
-    if (state.submitting) return;
-    try {
-      await loadPortal();
-      const portal = state.portal || {};
-      const active = activeWithdrawal(portal);
-      if (active) {
-        toast('You already have an active withdrawal request.');
-        return;
-      }
-
-      const amount = availableBalance(portal);
-      const minimum = minimumAmount(portal);
-      if (!state.selectedAccountId) {
-        toast('Select a verified payout account.', 'error');
-        return;
-      }
-      if (!amount || amount < minimum) {
-        toast(`Your available balance must reach ${fmt(minimum)} before withdrawal.`, 'error');
-        return;
-      }
-
-      const button = document.querySelector('#withdraw .btn-place-wd');
-      state.submitting = true;
-      if (button) { button.disabled = true; button.textContent = 'Submitting securely…'; }
-
-      const { data, error } = await client().rpc('chatearn_submit_withdrawal_v5', {
-        p_payout_account_id: state.selectedAccountId,
-        p_amount: amount,
-        p_idempotency_key: makeIdempotencyKey(),
-        p_user_note: null
-      });
-      if (error) throw error;
-      const result = unwrap(data);
-      if (result.ok === false) throw new Error(result.message || 'Withdrawal could not be submitted.');
-
-      sessionStorage.removeItem('ce_withdrawal_idempotency_key');
-      await loadPortal(true);
-      const withdrawal = activeWithdrawal(state.portal || {}) || result.withdrawal || result;
-      const status = text(withdrawal.status || result.status);
-
-      if (typeof trackEvent === 'function') {
-        trackEvent('withdrawal_submitted', {
-          amount,
-          status,
-          payout_account_id: state.selectedAccountId,
-          source: 'canonical_v5'
-        });
-      }
-
-      toast(result.message || 'Withdrawal request submitted successfully.');
-      if (status === 'kyc_required' && typeof goScreen === 'function') goScreen('kyc');
-      else if (status === 'sharing_required' && typeof goScreen === 'function') goScreen('sharewall');
-      else if (typeof goScreen === 'function') goScreen('processing');
-
-      const ref = byId('ppRef');
-      if (ref) ref.textContent = withdrawal.public_reference || result.public_reference || 'Pending';
-      const amountNode = byId('ppAmount');
-      if (amountNode) amountNode.textContent = fmt(withdrawal.amount || amount);
-      const account = state.accounts.find(a => a.id === state.selectedAccountId);
-      const bankNode = byId('ppBank');
-      if (bankNode && account) bankNode.textContent = accountLabel(account);
-    } catch (error) {
-      console.error('[ChatEarn 6E] withdrawal submit failed', error);
-      toast(error?.message || 'Unable to submit withdrawal.', 'error');
-      renderPortal();
-    } finally {
-      state.submitting = false;
-    }
-  }
-
-  const previousGoScreen = typeof goScreen === 'function' ? goScreen : null;
-  if (previousGoScreen) {
-    window.goScreen = function module6EGoScreen(id) {
-      const result = previousGoScreen(id);
-      if (id === 'withdraw' || id === 'earnings') loadPortalSafely(id === 'withdraw');
-      return result;
+  function getState() {
+    return {
+      ...state,
+      accounts: [...state.accounts]
     };
   }
-
-  window.placeWithdrawal = submitWithdrawal;
-  window.selectBank = function retiredLegacyBankSelector() { renderAccounts(); };
-  window.triggerBankVerify = function retiredLegacyBankVerification() {};
 
   function diagnostic() {
-    const legacyRawAccountInputsPresent = Boolean(byId('wdAccNo') || byId('wdAccName'));
-    const legacyRewardScriptPresent = Boolean(document.querySelector('script[src*="chatearn-v6-2-3-final.js"]'));
-    const legacyRewardStylesheetPresent = Boolean(document.querySelector('link[href*="chatearn-v6-2-rewards.css"]'));
-    const canonicalMarkupReady = document.querySelector('#withdraw .wd-body')?.dataset.canonicalV5 === '1';
-    const submit = document.querySelector('#withdraw .btn-place-wd');
-    const submitHasInlineHandler = Boolean(submit?.getAttribute('onclick'));
-    const checks = {
-      controllerInitialized: state.initialized,
-      canonicalMarkupReady,
-      canonicalPortalRpcConfigured: true,
-      canonicalAccountsRpcConfigured: true,
-      canonicalSubmitRpcConfigured: true,
-      legacyRawAccountInputsAbsent: !legacyRawAccountInputsPresent,
-      legacyRewardScriptInactive: !legacyRewardScriptPresent,
-      legacyRewardStylesheetInactive: !legacyRewardStylesheetPresent,
-      legacyInlineSubmitAbsent: !submitHasInlineHandler,
-      duplicateSubmissionGuardPresent: true,
-      idempotencyKeyPresent: true
-    };
     return {
       version: VERSION,
-      passed: Object.values(checks).every(Boolean),
-      checks,
-      canonicalRpcs: [
+      role: 'read_only_portal_provider',
+      initialized: state.initialized,
+      portalLoaded: Boolean(state.portal),
+      accountCount: state.accounts.length,
+      lastLoadedAt: state.lastLoadedAt,
+      lastError: state.lastError,
+      ownsUi: false,
+      ownsSubmission: false,
+      rpcs: [
         'chatearn_get_withdrawal_portal_v5',
-        'chatearn_get_payout_accounts_v5',
-        'chatearn_submit_withdrawal_v5'
-      ],
-      selectedAccountMasked: state.accounts.some(a => a.id === state.selectedAccountId),
-      activeWithdrawal: Boolean(activeWithdrawal(state.portal || {}))
+        'chatearn_get_payout_accounts_v5'
+      ]
     };
   }
 
   window.ChatEarnWithdrawalV5 = Object.freeze({
     version: VERSION,
-    load: loadPortalSafely,
-    submit: submitWithdrawal,
-    refresh: () => loadPortalSafely(true),
-    getState: () => ({ ...state, accounts: [...state.accounts] }),
+    load: loadPortal,
+    refresh: () => loadPortal(true),
+    getState,
     diagnostic
   });
 
   function initialize() {
     if (state.initialized) return;
     state.initialized = true;
-    retireLegacyRewardAsset();
-    rebuildWithdrawalMarkup();
-    const submit = document.querySelector('#withdraw .btn-place-wd');
-    if (submit && submit.dataset.canonicalListener !== '1') {
-      submit.removeAttribute('onclick');
-      submit.addEventListener('click', submitWithdrawal);
-      submit.dataset.canonicalListener = '1';
-    }
-    console.info(`[ChatEarn] Module ${VERSION} initialized`, diagnostic());
+    loadPortal(false);
+    console.info(`[ChatEarn] Withdrawal portal provider ${VERSION} initialized`);
   }
 
   if (document.readyState === 'loading') {
