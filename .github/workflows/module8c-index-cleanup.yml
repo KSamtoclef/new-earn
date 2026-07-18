@@ -26,21 +26,36 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Rewrite index safely
+      - name: Rewrite canonical index
         run: node scripts/module8c-rewrite-index.mjs
 
-      - name: Verify legacy references are gone
+      - name: Apply verified auth-session hard fix
+        run: node scripts/module8-auth-hard-fix.mjs
+
+      - name: Force latest auth controller cache key
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = 'index.html';
+          let html = fs.readFileSync(path, 'utf8');
+          html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.3');
+          fs.writeFileSync(path, html);
+          NODE
+
+      - name: Verify final routes
         run: |
           ! grep -q 'chatearn-v6-2-rewards.css' index.html
           ! grep -q 'chatearn-v6-2-3-final.js' index.html
           grep -q 'chatearn-module7-admin.js' index.html
+          grep -q 'chatearn-auth-session-fix.js?v=8.0.3' index.html
+          grep -q 'no active login session was established' assets/js/chatearn-app.js
 
-      - name: Commit updated index
+      - name: Commit final auth and index corrections
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
-          git commit -m 'Finalize Module 8C index cleanup'
+          git add index.html assets/js/chatearn-app.js
+          git diff --cached --quiet || git commit -m 'Finalize verified auth session flow'
           git push origin HEAD:module-4-reward-engine
 
-# Second push intentionally triggers the cleanup after the workflow exists.
+# Updated intentionally to trigger the final cleanup run.
