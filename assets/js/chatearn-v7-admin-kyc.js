@@ -1,173 +1,31 @@
-/* ChatEarn Module 7C: admin KYC review integration using the existing verified admin RPC boundary. */
+/* ChatEarn Module 7C.2: stable KYC review with bulk actions. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_MODULE_7C__) return;
-  window.__CHAT_EARN_MODULE_7C__ = true;
+  if (window.__CHAT_EARN_MODULE_7C2__) return;
+  window.__CHAT_EARN_MODULE_7C2__=true;
+  const VERSION='7C.2';
+  const state={loading:false,acting:false,items:[],filter:'pending',search:'',selected:new Set(),lastLoadedAt:0};
+  const byId=id=>document.getElementById(id),panel=()=>byId('ce6-kyc')||byId('admin-kyc');
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const when=v=>v?new Date(v).toLocaleString('en-NG',{timeZone:'Africa/Lagos'}):'—';
+  const notify=m=>window.showToast?.(m)||alert(m);
+  const client=()=>{if(window.ceAdminClient?.rpc)return window.ceAdminClient;throw new Error('Admin session is still loading. Refresh and try again.')};
+  const rpc=async(name,args={})=>{const{data,error}=await client().rpc(name,args);if(error)throw error;return typeof data==='string'?JSON.parse(data):data};
+  const status=i=>String(i.status||'pending').toLowerCase();
+  const visible=()=>state.items.filter(i=>{const q=state.search.trim().toLowerCase();if(state.filter!=='all'&&status(i)!==state.filter)return false;return !q||[i.full_name,i.account_name,i.email,i.reference,i.public_reference,i.provider].some(v=>String(v||'').toLowerCase().includes(q))});
 
-  const VERSION = '7C.1';
-  const state = { loading: false, acting: false, items: [], filter: 'pending', search: '', lastLoadedAt: 0 };
-  const byId = id => document.getElementById(id);
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const when = value => value ? new Date(value).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' }) : '—';
+  function render(){const host=panel();if(!host)return;const rows=visible();host.dataset.canonicalKycAdmin=VERSION;host.innerHTML=`
+    <div class="ce6-head"><div><h2>KYC Review</h2><small>Review identity verification records</small></div><button class="admin-btn" data-kyc-refresh>Refresh</button></div>
+    <div class="ce6-user-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><select data-kyc-filter>${['pending','approved','rejected','all'].map(s=>`<option value="${s}" ${state.filter===s?'selected':''}>${s}</option>`).join('')}</select><input data-kyc-search value="${esc(state.search)}" placeholder="Search name, email or reference" style="flex:1;min-width:210px"><button class="admin-btn" data-kyc-select-all>Select all</button><button class="admin-btn" data-kyc-clear>Clear</button></div>
+    <div class="admin-status-banner" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${state.selected.size} selected</b><button class="admin-btn" data-kyc-bulk="approved">Approve selected</button><button class="admin-btn" data-kyc-bulk="rejected">Reject selected</button></div>
+    <div class="admin-list">${rows.map(i=>{const s=status(i),pending=s==='pending';return `<div class="admin-row"><input type="checkbox" data-kyc-check="${esc(i.id)}" ${state.selected.has(String(i.id))?'checked':''} style="margin-right:10px"><div class="admin-row-main"><div class="admin-row-title">${esc(i.full_name||i.account_name||'User')} <span class="admin-tag">${esc(s)}</span></div><div class="admin-row-sub">${esc(i.email||'')}${i.public_reference||i.reference?` · ${esc(i.public_reference||i.reference)}`:''}<br>${i.external_opened?'Verification opened':'Verification not opened'} · ${when(i.created_at||i.submitted_at)}</div></div><div class="admin-head-actions">${pending?`<button class="admin-action approve" data-kyc-one="approved" data-id="${esc(i.id)}">Approve</button><button class="admin-action reject" data-kyc-one="rejected" data-id="${esc(i.id)}">Reject</button>`:'<span class="admin-tag">Reviewed</span>'}</div></div>`}).join('')||'<div class="admin-empty">No matching KYC records.</div>'}</div>`}
 
-  function client() {
-    if (window.ceAdminClient?.rpc) return window.ceAdminClient;
-    throw new Error('Admin client is unavailable. Sign in again and retry.');
-  }
+  async function load(force=false){if(state.loading)return;const host=panel();if(!host)return;if(!force&&state.items.length&&Date.now()-state.lastLoadedAt<5000)return render();state.loading=true;host.innerHTML='<div class="admin-empty">Loading KYC records…</div>';try{const data=await rpc('chatearn_v6_admin_queue',{p_kind:'kyc',p_status:state.filter==='all'?null:state.filter,p_limit:200,p_offset:0});state.items=Array.isArray(data?.rows)?data.rows:Array.isArray(data?.items)?data.items:Array.isArray(data)?data:[];state.lastLoadedAt=Date.now();state.selected=new Set([...state.selected].filter(id=>state.items.some(i=>String(i.id)===id)));render()}catch(e){host.innerHTML=`<div class="admin-error" style="display:block"><b>KYC records could not load.</b><br>${esc(e.message||e)}<br><button class="admin-btn" data-kyc-refresh style="margin-top:10px">Retry</button></div>`}finally{state.loading=false}}
 
-  async function rpc(name, args = {}) {
-    const { data, error } = await client().rpc(name, args);
-    if (error) throw error;
-    return typeof data === 'string' ? JSON.parse(data) : data;
-  }
+  async function review(ids,newStatus){if(state.acting||!ids.length)return;const note=(prompt(newStatus==='rejected'?'Reason for rejection:':'Admin note (optional):')||'').trim();if(newStatus==='rejected'&&!note)return notify('A rejection reason is required.');if(!confirm(`${newStatus==='approved'?'Approve':'Reject'} ${ids.length} KYC record(s)?`))return;state.acting=true;try{const r=await rpc('chatearn_v6_admin_bulk_review',{p_kind:'kyc',p_ids:ids,p_status:newStatus,p_note:note||null});const failed=Number(r?.failed||0),updated=Number(r?.updated??r?.success??ids.length-failed);notify(`${updated} KYC record(s) ${newStatus}${failed?`, ${failed} failed`:''}.`);state.selected.clear();await load(true)}catch(e){notify(e.message||'KYC review failed.')}finally{state.acting=false}}
 
-  function panel() { return byId('ce6-kyc') || byId('admin-kyc'); }
-  function notify(message) { window.showToast ? window.showToast(message) : alert(message); }
-  function normalizedStatus(item) { return String(item.status || 'pending').toLowerCase(); }
-
-  function filteredItems() {
-    const q = state.search.trim().toLowerCase();
-    return state.items.filter(item => {
-      const statusMatch = state.filter === 'all' || normalizedStatus(item) === state.filter;
-      if (!statusMatch) return false;
-      if (!q) return true;
-      return [item.full_name, item.email, item.reference, item.public_reference, item.provider, item.external_url]
-        .some(value => String(value || '').toLowerCase().includes(q));
-    });
-  }
-
-  function render() {
-    const host = panel();
-    if (!host) return;
-    host.dataset.canonicalKycAdmin = VERSION;
-    const rows = filteredItems();
-    host.innerHTML = `
-      <div class="ce6-head"><div><h2>KYC Review</h2><small>Admin-only review through the existing protected KYC queue</small></div><button class="admin-btn" data-ce7c-refresh>Refresh</button></div>
-      <div class="admin-status-banner"><b>Module 7C:</b> Review decisions are sent through the existing admin RPC boundary. No KYC record is edited directly from the browser.</div>
-      <div class="ce6-user-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-        <select data-ce7c-filter>
-          ${['pending','approved','rejected','all'].map(status => `<option value="${status}" ${state.filter===status?'selected':''}>${status[0].toUpperCase()+status.slice(1)}</option>`).join('')}
-        </select>
-        <input data-ce7c-search placeholder="Search name, email or reference" value="${esc(state.search)}">
-        <button class="admin-btn" data-ce7c-apply>Apply</button>
-        <button class="admin-btn" data-ce7c-clear>Clear</button>
-      </div>
-      <div class="admin-list">${rows.map(item => {
-        const status = normalizedStatus(item);
-        const pending = status === 'pending';
-        return `<div class="admin-row" data-ce7c-row="${esc(item.id)}">
-          <div class="admin-row-main">
-            <div class="admin-row-title">${esc(item.full_name || item.account_name || 'User')} <span class="admin-tag">${esc(status)}</span></div>
-            <div class="admin-row-sub">${esc(item.email || '')}${item.public_reference || item.reference ? ` · ${esc(item.public_reference || item.reference)}` : ''}<br>${item.external_opened ? 'External verification opened' : 'External verification not opened'} · Created ${when(item.created_at || item.submitted_at)}${item.admin_note ? `<br>Admin note: ${esc(item.admin_note)}` : ''}</div>
-          </div>
-          <div class="admin-head-actions">${pending ? `<button class="admin-action approve" data-ce7c-action="approved" data-id="${esc(item.id)}">Approve</button><button class="admin-action reject" data-ce7c-action="rejected" data-id="${esc(item.id)}">Reject</button>` : '<span class="admin-tag">Reviewed</span>'}</div>
-        </div>`;
-      }).join('') || '<div class="admin-empty">No matching KYC records.</div>'}</div>`;
-  }
-
-  async function load(force = false) {
-    if (state.loading) return;
-    if (!force && state.items.length && Date.now() - state.lastLoadedAt < 5000) { render(); return; }
-    const host = panel();
-    if (!host) return;
-    state.loading = true;
-    host.innerHTML = '<div class="admin-empty">Loading KYC records…</div>';
-    try {
-      const status = state.filter === 'all' ? null : state.filter;
-      const data = await rpc('chatearn_v6_admin_queue', { p_kind: 'kyc', p_status: status, p_limit: 100, p_offset: 0 });
-      const rows = Array.isArray(data?.rows) ? data.rows : [];
-      state.items = rows;
-      state.lastLoadedAt = Date.now();
-      render();
-    } catch (error) {
-      host.innerHTML = `<div class="admin-error" style="display:block">${esc(error.message || String(error))}</div>`;
-    } finally {
-      state.loading = false;
-    }
-  }
-
-  async function review(button) {
-    if (state.acting) return;
-    const id = button.dataset.id;
-    const status = button.dataset.ce7cAction;
-    const item = state.items.find(row => String(row.id) === String(id));
-    if (!item) return notify('KYC record is no longer available. Refresh the list.');
-    if (!confirm(`${status === 'approved' ? 'Approve' : 'Reject'} this KYC record?\n\n${item.full_name || item.email || id}`)) return;
-    const note = (prompt(status === 'rejected' ? 'Reason for rejection:' : 'Admin note (optional):') || '').trim();
-    if (status === 'rejected' && !note) return notify('A rejection reason is required.');
-
-    state.acting = true;
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Working…';
-    try {
-      const result = await rpc('chatearn_v6_admin_bulk_review', {
-        p_kind: 'kyc', p_ids: [id], p_status: status, p_note: note || null
-      });
-      const failed = Number(result?.failed || 0);
-      if (failed) throw new Error(result?.message || 'KYC review was not completed.');
-      notify(`KYC ${status}.`);
-      await load(true);
-    } catch (error) {
-      notify(error.message || 'KYC review failed.');
-      button.disabled = false;
-      button.textContent = original;
-    } finally {
-      state.acting = false;
-    }
-  }
-
-  function activeTab() { return document.querySelector('[data-ce6-tab="kyc"].active, [data-tab="kyc"].active'); }
-
-  function install() {
-    const content = byId('adminContent');
-    if (!content || window.__CHAT_EARN_MODULE_7C_INSTALLED__) return Boolean(content);
-    window.__CHAT_EARN_MODULE_7C_INSTALLED__ = true;
-    document.addEventListener('click', event => {
-      const tab = event.target.closest('[data-ce6-tab="kyc"], [data-tab="kyc"]');
-      if (tab) setTimeout(() => load(true), 0);
-      if (event.target.closest('[data-ce7c-refresh]')) { event.preventDefault(); load(true); }
-      if (event.target.closest('[data-ce7c-apply]')) {
-        event.preventDefault();
-        state.filter = document.querySelector('[data-ce7c-filter]')?.value || 'pending';
-        state.search = document.querySelector('[data-ce7c-search]')?.value || '';
-        load(true);
-      }
-      if (event.target.closest('[data-ce7c-clear]')) {
-        event.preventDefault(); state.filter = 'pending'; state.search = ''; load(true);
-      }
-      const action = event.target.closest('[data-ce7c-action]');
-      if (action) { event.preventDefault(); review(action); }
-    }, true);
-
-    let scheduled = false;
-    const observer = new MutationObserver(() => {
-      if (scheduled || !activeTab()) return;
-      const host = panel();
-      if (!host || host.dataset.canonicalKycAdmin === VERSION) return;
-      scheduled = true;
-      setTimeout(() => { scheduled = false; load(true); }, 0);
-    });
-    observer.observe(content, { childList: true, subtree: true });
-    if (activeTab()) load(true);
-    return true;
-  }
-
-  const timer = setInterval(() => { if (install()) clearInterval(timer); }, 250);
-  setTimeout(() => clearInterval(timer), 20000);
-
-  window.ChatEarnAdminKyc = Object.freeze({
-    version: VERSION,
-    refresh: () => load(true),
-    diagnostic: () => ({
-      version: VERSION,
-      adminClientReady: Boolean(window.ceAdminClient?.rpc),
-      panelPresent: Boolean(panel()),
-      protectedQueueRpc: 'chatearn_v6_admin_queue',
-      protectedReviewRpc: 'chatearn_v6_admin_bulk_review',
-      directTableMutation: false
-    })
-  });
-
-  console.info(`[ChatEarn] Module ${VERSION} admin KYC integration loaded`);
+  function install(){if(window.__CHAT_EARN_MODULE_7C2_INSTALLED__)return;window.__CHAT_EARN_MODULE_7C2_INSTALLED__=true;document.addEventListener('click',e=>{if(e.target.closest('[data-ce6-tab="kyc"],[data-tab="kyc"]'))setTimeout(()=>load(true),60);if(e.target.closest('[data-kyc-refresh]'))load(true);if(e.target.closest('[data-kyc-select-all]')){visible().filter(i=>status(i)==='pending').forEach(i=>state.selected.add(String(i.id)));render()}if(e.target.closest('[data-kyc-clear]')){state.selected.clear();render()}const one=e.target.closest('[data-kyc-one]');if(one)review([one.dataset.id],one.dataset.kycOne);const bulk=e.target.closest('[data-kyc-bulk]');if(bulk)review([...state.selected],bulk.dataset.kycBulk)},true);document.addEventListener('change',e=>{const f=e.target.closest('[data-kyc-filter]');if(f){state.filter=f.value;state.selected.clear();load(true)}const c=e.target.closest('[data-kyc-check]');if(c){c.checked?state.selected.add(c.dataset.kycCheck):state.selected.delete(c.dataset.kycCheck);render()}},true);document.addEventListener('input',e=>{const q=e.target.closest('[data-kyc-search]');if(q){state.search=q.value;render()}},true)}
+  install();
+  window.ChatEarnAdminKyc=Object.freeze({version:VERSION,refresh:()=>load(true),diagnostic:()=>({version:VERSION,items:state.items.length,selected:state.selected.size,adminClientReady:Boolean(window.ceAdminClient?.rpc)})});
+  console.info(`[ChatEarn] Admin KYC ${VERSION} loaded`);
 })();
