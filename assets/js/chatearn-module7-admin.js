@@ -4,7 +4,7 @@
   if (window.__CHAT_EARN_MODULE_7_ADMIN_COORDINATOR__) return;
   window.__CHAT_EARN_MODULE_7_ADMIN_COORDINATOR__ = true;
 
-  const VERSION = '8B.1';
+  const VERSION = '8D.1';
   const registry = [
     {
       key: '7A',
@@ -15,6 +15,11 @@
       key: '7C',
       flag: '__CHAT_EARN_MODULE_7C__',
       src: './assets/js/chatearn-v7-admin-kyc.js?v=7.0.1'
+    },
+    {
+      key: '8D',
+      flag: '__CHAT_EARN_V8D_FLOW__',
+      src: './assets/js/chatearn-v8d-offer-withdrawal-flow.js?v=8.1.0'
     }
   ];
   const failures = new Map();
@@ -48,6 +53,7 @@
   window.ChatEarnModule7Diagnostic = () => {
     const withdrawal = window.ChatEarnAdminWithdrawalsV5?.diagnostic?.() || null;
     const kyc = window.ChatEarnAdminKyc?.diagnostic?.() || null;
+    const flow = window.ChatEarnV8DFlow?.diagnostic?.() || null;
     const duplicateScripts = registry.filter(module =>
       document.querySelectorAll(`script[data-chatearn-module="${module.key}"]`).length > 1
     ).map(module => module.key);
@@ -58,12 +64,14 @@
       legacyRewardDisabled: window.ChatEarnRewardDiagnostic?.().disabled === true,
       withdrawal,
       kyc,
+      flow,
       duplicateScripts,
       failures: Object.fromEntries(failures),
       passed: Boolean(
         window.ChatEarnRewardDiagnostic?.().disabled === true &&
         withdrawal?.canonicalRpcs?.includes('chatearn_admin_transition_withdrawal_v5') &&
         kyc?.directTableMutation === false &&
+        flow?.version === '8D.1' &&
         duplicateScripts.length === 0 &&
         failures.size === 0
       )
