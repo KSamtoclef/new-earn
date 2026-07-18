@@ -1,5 +1,6 @@
--- ChatEarn final RPC permission repair
--- Restores execute access for the live frontend and admin panel without changing function logic.
+-- ChatEarn final RPC permission repair (corrected)
+-- Restores execute access without changing function logic.
+-- Safe to run repeatedly.
 
 begin;
 
@@ -7,12 +8,10 @@ begin;
 do $$
 declare
   r record;
-  fn text;
 begin
   for r in
-    select n.nspname as schema_name,
-           p.proname as function_name,
-           pg_get_function_identity_arguments(p.oid) as identity_args
+    select p.oid,
+           p.oid::regprocedure as function_signature
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
@@ -29,22 +28,19 @@ begin
         'chatearn_v3_track_offer_event'
       )
   loop
-    fn := format('%I.%I(%s)', r.schema_name, r.function_name, r.identity_args);
-    execute format('revoke all on function %s from public, anon', fn);
-    execute format('grant execute on function %s to authenticated', fn);
+    execute format('revoke all on function %s from public, anon', r.function_signature);
+    execute format('grant execute on function %s to authenticated', r.function_signature);
   end loop;
 end $$;
 
--- Admin RPCs. Admin authorization must still be enforced inside each function.
+-- Admin RPCs. Each function must still perform its own admin authorization internally.
 do $$
 declare
   r record;
-  fn text;
 begin
   for r in
-    select n.nspname as schema_name,
-           p.proname as function_name,
-           pg_get_function_identity_arguments(p.oid) as identity_args
+    select p.oid,
+           p.oid::regprocedure as function_signature
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
@@ -61,27 +57,20 @@ begin
         'chatearn_v5_admin_save_offer_presentation'
       )
   loop
-    fn := format('%I.%I(%s)', r.schema_name, r.function_name, r.identity_args);
-    execute format('revoke all on function %s from public, anon', fn);
-    execute format('grant execute on function %s to authenticated', fn);
+    execute format('revoke all on function %s from public, anon', r.function_signature);
+    execute format('grant execute on function %s to authenticated', r.function_signature);
   end loop;
 end $$;
 
--- Ensure PostgREST refreshes the function signatures and grants.
 notify pgrst, 'reload schema';
-
 commit;
 
--- Verification report: every row should show authenticated_can_execute = true.
+-- Verification report: every returned row should show authenticated_can_execute = true.
 select
   n.nspname as schema_name,
   p.proname as function_name,
-  pg_get_function_identity_arguments(p.oid) as identity_arguments,
-  has_function_privilege(
-    'authenticated',
-    format('%I.%I(%s)', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)),
-    'EXECUTE'
-  ) as authenticated_can_execute,
+  p.oid::regprocedure::text as function_signature,
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_can_execute,
   p.prosecdef as security_definer
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
@@ -108,4 +97,4 @@ where n.nspname = 'public'
     'chatearn_v4_admin_toggle_task',
     'chatearn_v5_admin_save_offer_presentation'
   )
-order by p.proname, identity_arguments;
+order by p.proname, p.oid::regprocedure::text;
