@@ -1,10 +1,10 @@
-/* ChatEarn V8E.7 — persistent withdrawal with active-request recovery. */
+/* ChatEarn V8E.8 — canonical direct withdrawal UI and submission controller. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_V8E7_DIRECT_WITHDRAWAL__) return;
-  window.__CHAT_EARN_V8E7_DIRECT_WITHDRAWAL__ = true;
+  if (window.__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__) return;
+  window.__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__ = true;
 
-  const VERSION='8E.7',DRAFT_KEY='ce_withdrawal_draft_v8e',FLOW_KEY='ce_withdrawal_flow_v8e',IDEMPOTENCY_KEY='ce_direct_withdrawal_key';
+  const VERSION='8E.8',DRAFT_KEY='ce_withdrawal_draft_v8e',FLOW_KEY='ce_withdrawal_flow_v8e',IDEMPOTENCY_KEY='ce_direct_withdrawal_key';
   const byId=id=>document.getElementById(id);
   const getClient=()=>{try{if(typeof supabaseClient!=='undefined'&&supabaseClient?.rpc)return supabaseClient}catch(_){}if(window.supabaseClient?.rpc)return window.supabaseClient;throw new Error('connection_unavailable')};
   const rpc=async(name,args={})=>{const{data,error}=await getClient().rpc(name,args);if(error)throw error;return typeof data==='string'?JSON.parse(data):data};
@@ -40,8 +40,10 @@
       e.preventDefault();removeTechnicalNotices();const btn=f.querySelector('button'),status=byId('ceDirectWithdrawalStatus'),accountName=name.value.trim(),accountNumber=number.value.replace(/\D/g,'').slice(0,10);
       if(accountName.length<3||!/[a-zA-Z]/.test(accountName)){status.textContent='Enter the correct account name.';name.focus();return}
       if(accountNumber.length!==10){status.textContent='Enter a valid 10-digit account number.';number.focus();return}
-      const amount=visibleAmount();if(amount<40000){status.textContent='Your withdrawal amount is not ready yet.';return}
-      persist();btn.disabled=true;btn.textContent='Placing Withdrawal…';status.textContent='Securing your request…';let key=localStorage.getItem(IDEMPOTENCY_KEY);if(!key){key=`direct-${crypto.randomUUID()}`;localStorage.setItem(IDEMPOTENCY_KEY,key)}
+      btn.disabled=true;btn.textContent='Checking Balance…';status.textContent='Confirming your available balance…';
+      await window.ChatEarnWithdrawalV5?.refresh?.();
+      const amount=visibleAmount();if(amount<40000){status.textContent='Your withdrawal amount is not ready yet.';btn.disabled=false;btn.textContent='Place My Withdrawal Now →';return}
+      persist();btn.textContent='Placing Withdrawal…';status.textContent='Securing your request…';let key=localStorage.getItem(IDEMPOTENCY_KEY);if(!key){key=`direct-${crypto.randomUUID()}`;localStorage.setItem(IDEMPOTENCY_KEY,key)}
       try{const r=await rpc('chatearn_place_withdrawal_now_v7',{p_provider:bank.value,p_account_number:accountNumber,p_account_name:accountName,p_amount:amount,p_idempotency_key:key});if(r?.ok&&routeWithdrawal(r))return;if(await recoverActive())return;status.textContent='Withdrawal could not be started. Please try again shortly.'}
       catch(_){if(!(await recoverActive()))status.textContent='Withdrawal could not be started. Please try again shortly.'}
       finally{btn.disabled=false;btn.textContent='Place My Withdrawal Now →';removeTechnicalNotices()}
@@ -50,10 +52,10 @@
 
   function showContinue(){const p=byId('processing');if(!p||byId('ceContinueEarningBtn'))return;const w=document.createElement('div');w.style.cssText='margin-top:18px;text-align:center;max-width:430px;padding:0 20px';w.innerHTML='<div style="margin-bottom:12px">Your payment is processing securely. You can continue earning.</div><button id="ceContinueEarningBtn" class="btn-place-wd" style="display:block!important">Continue Earning →</button>';p.appendChild(w);byId('ceContinueEarningBtn').onclick=async()=>{const flow=loadFlow(),btn=byId('ceContinueEarningBtn');btn.disabled=true;try{if(flow?.withdrawal_id)await rpc('chatearn_resume_earning_after_withdrawal_v6',{p_withdrawal_id:flow.withdrawal_id});localStorage.setItem('ce_returning_user','1');saveFlow({withdrawal_id:flow?.withdrawal_id||null,stage:'processing'});window.ChatEarnV8DFlow?.openNextConversation?.()||window.goScreen?.('dashboard')}catch(_){btn.disabled=false}}}
   function resume(){const f=loadFlow();if(!f?.stage)return;let s='';try{s=currentScreen||''}catch(_){}if(f.stage==='sharing_required'&&['withdraw','processing'].includes(s))window.goScreen?.('sharewall');else if(f.stage==='kyc_required'&&s==='withdraw')window.goScreen?.('kyc')}
-  const original=window.goScreen;if(typeof original==='function')window.goScreen=function(id){const r=original(id);if(id==='withdraw')setTimeout(()=>{ensureDirectForm();recoverActive()},80);if(id==='processing')setTimeout(showContinue,60);return r};
-  function boot(){patchToast();cleanOldUi();let s='';try{s=currentScreen||''}catch(_){}if(s==='withdraw'){ensureDirectForm();recoverActive()}if(s==='processing')showContinue();resume()}
+  const original=window.goScreen;if(typeof original==='function')window.goScreen=function(id){const r=original(id);if(id==='withdraw')setTimeout(()=>{ensureDirectForm();window.ChatEarnWithdrawalV5?.refresh?.();recoverActive()},80);if(id==='processing')setTimeout(showContinue,60);return r};
+  function boot(){patchToast();cleanOldUi();let s='';try{s=currentScreen||''}catch(_){}if(s==='withdraw'){ensureDirectForm();window.ChatEarnWithdrawalV5?.refresh?.();recoverActive()}if(s==='processing')showContinue();resume()}
   const observer=new MutationObserver(records=>{for(const r of records){if(r.addedNodes.length){removeTechnicalNotices();break}}});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{boot();observer.observe(document.body,{childList:true,subtree:true})},{once:true});else{boot();observer.observe(document.body,{childList:true,subtree:true})}
   window.addEventListener('pageshow',()=>setTimeout(boot,120));
-  window.ChatEarnV8EDirectWithdrawal=Object.freeze({version:VERSION,ensureDirectForm,recoverActive,diagnostic:()=>({version:VERSION,flow:loadFlow()})});
+  window.ChatEarnV8EDirectWithdrawal=Object.freeze({version:VERSION,ensureDirectForm,recoverActive,diagnostic:()=>({version:VERSION,flow:loadFlow(),soleUiOwner:true,soleSubmitOwner:true})});
 })();
