@@ -52,7 +52,7 @@ jobs:
             [/chatearn-v4-2\.js\?v=[^"']+/g, 'chatearn-v4-2.js?v=4.2.1'],
             [/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.5'],
             [/chatearn-chat-runtime-integrity\.js\?v=[^"']+/g, 'chatearn-chat-runtime-integrity.js?v=8.6.1'],
-            [/chatearn-module7-admin\.js\?v=[^"']+/g, 'chatearn-module7-admin.js?v=9.0.0'],
+            [/chatearn-module7-admin\.js\?v=[^"']+/g, 'chatearn-module7-admin.js?v=9.0.1'],
             [/chatearn-v6-admin\.js\?v=[^"']+/g, 'chatearn-v6-admin.js?v=6.1.6']
           ];
           replacements.forEach(([pattern, value]) => { html = html.replace(pattern, value); });
@@ -63,7 +63,7 @@ jobs:
             'chatearn-v4-2.js?v=4.2.1',
             'chatearn-auth-session-fix.js?v=8.0.5',
             'chatearn-chat-runtime-integrity.js?v=8.6.1',
-            'chatearn-module7-admin.js?v=9.0.0',
+            'chatearn-module7-admin.js?v=9.0.1',
             'chatearn-v6-admin.js?v=6.1.6'
           ];
 
@@ -88,8 +88,8 @@ jobs:
           node --check assets/js/chatearn-v7-admin-kyc.js
           node --check assets/js/chatearn-v8d-offer-withdrawal-flow.js
           grep -q "const VERSION = 'canonical-portal-5.0.0'" assets/js/chatearn-v4-returning.js
-          grep -q "const VERSION = 'canonical-1.1.0'" assets/js/chatearn-module7-admin.js
-          grep -q "__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__" assets/js/chatearn-v8e-direct-withdrawal-flow.js
+          grep -q "const VERSION = 'canonical-1.1.1'" assets/js/chatearn-module7-admin.js
+          grep -q "__CHAT_EARN_V8E9_DIRECT_WITHDRAWAL__" assets/js/chatearn-v8e-direct-withdrawal-flow.js
           ! test -f assets/js/chatearn-v8f-final-stabilizer.js
 
       - name: Verify static runtime references exist
@@ -108,5 +108,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Finalize canonical runtime cache keys and static audit'
+          git diff --cached --quiet || git commit -m 'Finalize repaired withdrawal runtime cache keys'
           git push origin HEAD:main
