@@ -26,13 +26,19 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Force latest auth controller cache key
+      - name: Apply final index routes
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const path = 'index.html';
           let html = fs.readFileSync(path, 'utf8');
           html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
+          const cta = '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>';
+          if (!html.includes(cta)) {
+            const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
+            if (!html.includes(marker)) throw new Error('Module 7 marker missing');
+            html = html.replace(marker, `${cta}\n${marker}`);
+          }
           fs.writeFileSync(path, html);
           NODE
 
@@ -42,14 +48,14 @@ jobs:
           ! grep -q 'chatearn-v6-2-3-final.js' index.html
           grep -q 'chatearn-module7-admin.js' index.html
           grep -q 'chatearn-auth-session-fix.js?v=8.0.4' index.html
-          grep -q "const VERSION = '8.0.4'" assets/js/chatearn-auth-session-fix.js
+          grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
 
-      - name: Commit index cache update
+      - name: Commit index update
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Load auth session controller 8.0.4'
+          git diff --cached --quiet || git commit -m 'Show withdrawal action inside chat at threshold'
           git push origin HEAD:module-4-reward-engine
 
-# Updated intentionally to trigger the auth controller deployment.
+# Updated intentionally to trigger the in-chat withdrawal CTA deployment.
