@@ -2,7 +2,7 @@ const SUPABASE_URL="https://dtjxcgzpwemdgdeinkcl.supabase.co";
 const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0anhjZ3pwd2VtZGdkZWlua2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDg0ODQsImV4cCI6MjA5MzQ4NDQ4NH0.kGjtOZfK7onzr-3FVMuSljiJ3emllxtGdepxrFVUPPM";
 const supabaseClient=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const SITE="https://chat-earn.xyz",AFF="https://jikgykm.com/cl/a9f1535a330a2652",BACK="https://omg10.com/4/4105256",REQ=5;
-const MIN_WITHDRAW=40000,MAX_EARN=65000,SIGNUP_BONUS=10000;
+const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;
 const SESSION_ID=sessionStorage.getItem('ce_session_id')||crypto.randomUUID(); sessionStorage.setItem('ce_session_id',SESSION_ID);
 const VISITOR_ID=localStorage.getItem('ce_visitor_id')||crypto.randomUUID(); localStorage.setItem('ce_visitor_id',VISITOR_ID);
 let currentUser=null,currentProfile=null,userName="",totalBalance=SIGNUP_BONUS,chatEarnings=0,replyCount=0,currentChatUser=null,currentScreen="landing";
