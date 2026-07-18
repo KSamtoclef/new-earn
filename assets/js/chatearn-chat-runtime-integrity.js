@@ -1,16 +1,16 @@
-/* ChatEarn Module 8: consolidated chat runtime integrity controller. */
+/* ChatEarn Module 8: single chat runtime controller for tasks, withdrawal and first-session limit. */
 (() => {
   'use strict';
-  if (window.__CE_CHAT_RUNTIME_INTEGRITY__) return;
-  window.__CE_CHAT_RUNTIME_INTEGRITY__ = true;
+  if (window.__CE_CHAT_RUNTIME_V860__) return;
+  window.__CE_CHAT_RUNTIME_V860__ = true;
 
-  const VERSION = '8.5.0';
+  const VERSION = '8.6.0';
   const TASK_EVERY = 3;
   const WITHDRAW_AT = 40000;
   const SESSION_LIMIT = 80000;
-  const retryAttempts = new WeakMap();
   let observer = null;
   let observedBody = null;
+  let lastSignature = '';
 
   const chatBody = () => document.getElementById('chatBody');
   const partnerKey = () => {
@@ -41,12 +41,9 @@
     else window.showToast?.('Your earning task is loading. Tap again in a moment.');
   }
 
-  function ensureTask(milestone, anchor) {
-    const body = chatBody();
-    if (!body || milestone < 1) return;
+  function ensureTask(body, milestone, anchor) {
     const key = `${partnerKey()}:${milestone}`;
     if (body.querySelector(`.ce-chat-native-task[data-runtime-key="${CSS.escape(key)}"]`)) return;
-
     const card = document.createElement('div');
     card.className = 'ce-chat-native-task';
     card.dataset.runtimeKey = key;
@@ -55,57 +52,66 @@
     card.querySelector('button').addEventListener('click', event => openOffer(event.currentTarget));
     (anchor || body.lastElementChild)?.insertAdjacentElement('afterend', card);
     if (!card.isConnected) body.appendChild(card);
-    body.scrollTop = body.scrollHeight;
     track('chat_native_task_impression', { partner: partnerKey(), milestone });
   }
 
-  function repairSuccessfulRetry(message) {
-    const status = message.querySelector('.msg-status')?.textContent || '';
-    if (message.querySelector('.msg-earn') || status.includes('✓✓')) {
-      message.classList.remove('failed');
-      message.querySelectorAll('.msg-retry').forEach(node => node.remove());
+  function ensureWithdrawal(body, amount) {
+    let card = body.querySelector('#ceRuntimeWithdrawalCard');
+    if (amount < WITHDRAW_AT) {
+      card?.remove();
+      return;
+    }
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'ceRuntimeWithdrawalCard';
+      card.style.cssText = 'margin:16px 0;padding:15px;border:1px solid rgba(0,200,83,.48);border-radius:18px;background:linear-gradient(135deg,rgba(0,200,83,.16),rgba(20,32,25,.96));box-shadow:0 10px 28px rgba(0,0,0,.22);';
+      card.innerHTML = '<div style="font-size:15px;font-weight:900;color:#00e676;margin-bottom:5px;">Withdrawal unlocked</div><div class="ce-runtime-withdraw-text" style="font-size:12px;line-height:1.5;color:#d4ddd7;margin-bottom:11px;"></div><button type="button" style="width:100%;padding:12px 14px;border:0;border-radius:12px;background:#00c853;color:#04130a;font-size:14px;font-weight:900;cursor:pointer;">Withdraw now →</button>';
+      card.querySelector('button').addEventListener('click', () => {
+        track('chat_withdraw_cta_clicked', { balance: balance() });
+        if (typeof goScreen === 'function') goScreen('earnings');
+      });
+      body.appendChild(card);
+    }
+    const reached = amount >= SESSION_LIMIT;
+    card.querySelector('.ce-runtime-withdraw-text').textContent = reached
+      ? `${money(amount)} earned. Your first earning session is complete. Withdraw before starting another session.`
+      : `${money(amount)} is available. You may withdraw now or continue earning up to ${money(SESSION_LIMIT)}.`;
+    card.querySelector('button').textContent = `Withdraw ${money(amount)} →`;
+  }
+
+  function enforceLimit(amount) {
+    const input = document.getElementById('chatInput');
+    const send = document.querySelector('.chat-send-btn, #sendBtn');
+    if (amount >= SESSION_LIMIT) {
+      if (input) {
+        input.disabled = true;
+        input.placeholder = 'Withdraw to begin another earning session';
+      }
+      if (send) {
+        send.disabled = true;
+        send.setAttribute('aria-label', 'Withdrawal required before continuing');
+      }
+    } else {
+      if (input) input.disabled = false;
+      if (send) send.disabled = false;
     }
   }
 
-  function scheduleTransientRetry(message) {
-    if (!message.classList.contains('failed') || !navigator.onLine) return;
-    const retry = message.querySelector('.msg-retry');
-    if (!retry || retryAttempts.get(message)) return;
-    retryAttempts.set(message, 1);
-    setTimeout(() => {
-      if (!message.isConnected || !message.classList.contains('failed') || !navigator.onLine) return;
-      try { retry.click(); track('chat_message_auto_retry', { partner: partnerKey() }); } catch (_) {}
-    }, 1800);
-  }
-
-  function reconcile() {
+  function reconcile(force = false) {
     const body = chatBody();
     if (!body) return;
-
-    const outgoing = [...body.querySelectorAll('.msg.outgoing')];
-    outgoing.forEach(message => {
-      repairSuccessfulRetry(message);
-      scheduleTransientRetry(message);
-    });
-
     const successful = successfulMessages(body);
-    for (let count = TASK_EVERY; count <= successful.length; count += TASK_EVERY) {
-      const milestone = count / TASK_EVERY;
-      ensureTask(milestone, successful[count - 1]);
-    }
-
     const amount = balance();
-    const withdrawCta = document.getElementById('ceChatWithdrawCta');
-    if (withdrawCta) withdrawCta.style.display = amount >= WITHDRAW_AT ? 'block' : 'none';
-    const limitNotice = document.getElementById('ceFirstSessionNotice');
-    if (limitNotice) limitNotice.style.display = amount >= WITHDRAW_AT ? 'block' : 'none';
+    const signature = `${partnerKey()}|${successful.length}|${amount}|${body.querySelectorAll('.msg.outgoing.failed').length}`;
+    if (!force && signature === lastSignature) return;
+    lastSignature = signature;
 
-    if (amount >= SESSION_LIMIT) {
-      const input = document.getElementById('chatInput');
-      const send = document.querySelector('.chat-send-btn, #sendBtn');
-      if (input) input.placeholder = 'Withdraw to begin another earning session';
-      if (send) send.setAttribute('aria-label', 'Withdrawal required before continuing');
+    for (let count = TASK_EVERY; count <= successful.length; count += TASK_EVERY) {
+      ensureTask(body, count / TASK_EVERY, successful[count - 1]);
     }
+    ensureWithdrawal(body, amount);
+    enforceLimit(amount);
+    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
   }
 
   function observe() {
@@ -114,29 +120,16 @@
     if (observer && observedBody === body) return true;
     observer?.disconnect();
     observedBody = body;
-    observer = new MutationObserver(() => queueMicrotask(reconcile));
+    observer = new MutationObserver(() => queueMicrotask(() => reconcile(false)));
     observer.observe(body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
-    reconcile();
+    reconcile(true);
     return true;
   }
 
-  function guardDuplicateOpening() {
-    const original = window.deliverReply;
-    if (typeof original !== 'function' || original.__ceOpeningGuard) return;
-    const wrapped = function (text, isOpening = false, ...rest) {
-      const body = chatBody();
-      if (isOpening && body && body.querySelector('.msg.incoming, .msg.outgoing')) return;
-      return original.call(this, text, isOpening, ...rest);
-    };
-    wrapped.__ceOpeningGuard = true;
-    window.deliverReply = wrapped;
-  }
-
   const timer = setInterval(() => {
-    guardDuplicateOpening();
     observe();
-    reconcile();
-  }, 350);
+    reconcile(false);
+  }, 1000);
 
   window.ChatEarnRuntimeIntegrity = Object.freeze({
     version: VERSION,
@@ -145,17 +138,18 @@
       partner: partnerKey(),
       successfulMessages: chatBody() ? successfulMessages(chatBody()).length : 0,
       taskCards: chatBody()?.querySelectorAll('.ce-chat-native-task').length || 0,
-      failedMessages: chatBody()?.querySelectorAll('.msg.outgoing.failed').length || 0,
+      withdrawalCard: Boolean(chatBody()?.querySelector('#ceRuntimeWithdrawalCard')),
       balance: balance(),
       withdrawalAvailable: balance() >= WITHDRAW_AT,
       sessionLimitReached: balance() >= SESSION_LIMIT,
-      observerActive: Boolean(observer)
+      observerActive: Boolean(observer),
+      timerActive: Boolean(timer)
     })
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observe, { once: true });
   else observe();
-  window.addEventListener('online', reconcile);
-  window.addEventListener('pageshow', () => setTimeout(reconcile, 80));
-  console.info(`[ChatEarn] Runtime integrity ${VERSION} loaded`);
+  window.addEventListener('online', () => reconcile(true));
+  window.addEventListener('pageshow', () => setTimeout(() => reconcile(true), 80));
+  console.info(`[ChatEarn] Unified chat runtime ${VERSION} loaded`);
 })();
