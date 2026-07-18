@@ -42,3 +42,5 @@ jobs:
           git add index.html
           git commit -m 'Finalize Module 8C index cleanup'
           git push origin HEAD:module-4-reward-engine
+
+# Second push intentionally triggers the cleanup after the workflow exists.
