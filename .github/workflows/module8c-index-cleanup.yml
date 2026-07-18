@@ -1,9 +1,9 @@
-name: ChatEarn Production Runtime Cleanup
+name: ChatEarn Canonical Runtime Release Audit
 
 on:
   push:
     branches:
-      - main
+      - cleanup/canonical-runtime
     paths:
       - .github/workflows/module8c-index-cleanup.yml
   workflow_dispatch:
@@ -12,13 +12,13 @@ permissions:
   contents: write
 
 jobs:
-  cleanup:
+  audit-and-cache-bump:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out production branch
+      - name: Check out cleanup branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: cleanup/canonical-runtime
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -26,52 +26,85 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Remove duplicate chat controllers
+      - name: Apply canonical cache keys and remove retired references
         run: |
           node - <<'NODE'
           const fs = require('fs');
-          const indexPath = 'index.html';
-          let html = fs.readFileSync(indexPath, 'utf8');
+          const path = 'index.html';
+          let html = fs.readFileSync(path, 'utf8');
 
-          const duplicatePatterns = [
-            /\s*<script src="\.\/assets\/js\/chatearn-chat-withdraw-cta\.js\?v=[^"]+" defer><\/script>/g,
-            /\s*<script src="\.\/assets\/js\/chatearn-chat-ads\.js\?v=[^"]+" defer><\/script>/g,
-            /\s*<script src="\.\/assets\/js\/chatearn-first-session-limit\.js\?v=[^"]+" defer><\/script>/g
+          const retired = [
+            'chatearn-v6-2-3-final.js',
+            'chatearn-v6-2-rewards.css',
+            'chatearn-v8f-final-stabilizer.js',
+            'chatearn-chat-withdraw-cta.js',
+            'chatearn-chat-ads.js',
+            'chatearn-first-session-limit.js'
           ];
-          duplicatePatterns.forEach(pattern => { html = html.replace(pattern, ''); });
+          for (const asset of retired) {
+            const escaped = asset.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            html = html.replace(new RegExp('\\s*<(?:script|link)[^>]+(?:src|href)="[^"]*' + escaped + '[^"]*"[^>]*(?:><\\/script>)?', 'g'), '');
+          }
 
-          html = html.replace(
-            /chatearn-chat-runtime-integrity\.js\?v=[^"']+/g,
-            'chatearn-chat-runtime-integrity.js?v=8.6.0'
-          );
+          const replacements = [
+            [/chatearn-v4-returning\.js\?v=[^"']+/g, 'chatearn-v4-returning.js?v=5.0.0'],
+            [/chatearn-v4-2\.js\?v=[^"']+/g, 'chatearn-v4-2.js?v=4.2.1'],
+            [/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.5'],
+            [/chatearn-chat-runtime-integrity\.js\?v=[^"']+/g, 'chatearn-chat-runtime-integrity.js?v=8.6.1'],
+            [/chatearn-module7-admin\.js\?v=[^"']+/g, 'chatearn-module7-admin.js?v=9.0.0'],
+            [/chatearn-v6-admin\.js\?v=[^"']+/g, 'chatearn-v6-admin.js?v=6.1.6']
+          ];
+          replacements.forEach(([pattern, value]) => { html = html.replace(pattern, value); });
 
-          const runtimeTag = '<script src="./assets/js/chatearn-chat-runtime-integrity.js?v=8.6.0" defer></script>';
-          const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
-          if (!html.includes(marker)) throw new Error('Module 7 marker missing');
-          if (!html.includes(runtimeTag)) html = html.replace(marker, `${runtimeTag}\n${marker}`);
+          const required = [
+            'chatearn-v3.js?v=4.2.0',
+            'chatearn-v4-returning.js?v=5.0.0',
+            'chatearn-v4-2.js?v=4.2.1',
+            'chatearn-auth-session-fix.js?v=8.0.5',
+            'chatearn-chat-runtime-integrity.js?v=8.6.1',
+            'chatearn-module7-admin.js?v=9.0.0',
+            'chatearn-v6-admin.js?v=6.1.6'
+          ];
+          required.forEach(asset => {
+            const count = html.split(asset).length - 1;
+            if (count !== 1) throw new Error(asset + ' reference count is ' + count);
+          });
+          retired.forEach(asset => {
+            if (html.includes(asset)) throw new Error('Retired asset still referenced: ' + asset);
+          });
 
-          const appPath = 'assets/js/chatearn-app.js';
-          let app = fs.readFileSync(appPath, 'utf8');
-          app = app.replace(/MAX_EARN=\d+/, 'MAX_EARN=80000');
-          if (!app.includes('MAX_EARN=80000')) throw new Error('80k session limit missing');
-
-          fs.writeFileSync(indexPath, html);
-          fs.writeFileSync(appPath, app);
+          fs.writeFileSync(path, html);
           NODE
 
-      - name: Verify clean production runtime
+      - name: Verify controller ownership and syntax
         run: |
-          ! grep -q 'chatearn-chat-withdraw-cta.js' index.html
-          ! grep -q 'chatearn-chat-ads.js' index.html
-          ! grep -q 'chatearn-first-session-limit.js' index.html
-          grep -q 'chatearn-chat-runtime-integrity.js?v=8.6.0' index.html
-          grep -q "const VERSION = '8.6.0'" assets/js/chatearn-chat-runtime-integrity.js
-          grep -q 'MAX_EARN=80000' assets/js/chatearn-app.js
+          node --check assets/js/chatearn-v4-returning.js
+          node --check assets/js/chatearn-v4-2.js
+          node --check assets/js/chatearn-v8e-direct-withdrawal-flow.js
+          node --check assets/js/chatearn-module7-admin.js
+          node --check assets/js/chatearn-v7-admin-withdrawals.js
+          node --check assets/js/chatearn-v7-admin-kyc.js
+          node --check assets/js/chatearn-v8d-offer-withdrawal-flow.js
+          grep -q "const VERSION = 'canonical-portal-5.0.0'" assets/js/chatearn-v4-returning.js
+          grep -q "const VERSION = 'canonical-1.1.0'" assets/js/chatearn-module7-admin.js
+          grep -q "__CHAT_EARN_V8E8_DIRECT_WITHDRAWAL__" assets/js/chatearn-v8e-direct-withdrawal-flow.js
+          ! test -f assets/js/chatearn-v8f-final-stabilizer.js
 
-      - name: Commit production cleanup
+      - name: Verify static runtime references exist
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const refs = [...html.matchAll(/(?:src|href)="\.\/(assets\/[^"?]+)(?:\?[^" ]*)?"/g)].map(m => m[1]);
+          const missing = [...new Set(refs)].filter(file => !fs.existsSync(file));
+          if (missing.length) throw new Error('Missing referenced assets: ' + missing.join(', '));
+          console.log('Verified local assets:', new Set(refs).size);
+          NODE
+
+      - name: Commit audited cache keys
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html assets/js/chatearn-app.js
-          git diff --cached --quiet || git commit -m 'Clean duplicate chat runtime controllers'
-          git push origin HEAD:main
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Finalize canonical runtime cache keys and static audit'
+          git push origin HEAD:cleanup/canonical-runtime
