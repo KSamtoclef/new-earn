@@ -3,7 +3,7 @@ name: ChatEarn Canonical Runtime Release Audit
 on:
   push:
     branches:
-      - cleanup/canonical-runtime
+      - main
     paths:
       - .github/workflows/module8c-index-cleanup.yml
   workflow_dispatch:
@@ -15,10 +15,10 @@ jobs:
   audit-and-cache-bump:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out cleanup branch
+      - name: Check out production branch
         uses: actions/checkout@v4
         with:
-          ref: cleanup/canonical-runtime
+          ref: main
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -41,6 +41,7 @@ jobs:
             'chatearn-chat-ads.js',
             'chatearn-first-session-limit.js'
           ];
+
           for (const asset of retired) {
             const escaped = asset.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             html = html.replace(new RegExp('\\s*<(?:script|link)[^>]+(?:src|href)="[^"]*' + escaped + '[^"]*"[^>]*(?:><\\/script>)?', 'g'), '');
@@ -65,6 +66,7 @@ jobs:
             'chatearn-module7-admin.js?v=9.0.0',
             'chatearn-v6-admin.js?v=6.1.6'
           ];
+
           required.forEach(asset => {
             const count = html.split(asset).length - 1;
             if (count !== 1) throw new Error(asset + ' reference count is ' + count);
@@ -107,4 +109,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           git diff --cached --quiet || git commit -m 'Finalize canonical runtime cache keys and static audit'
-          git push origin HEAD:cleanup/canonical-runtime
+          git push origin HEAD:main
