@@ -1,9 +1,9 @@
-name: Module 8C Final Runtime Wiring
+name: ChatEarn Production Runtime Cleanup
 
 on:
   push:
     branches:
-      - module-4-reward-engine
+      - main
     paths:
       - .github/workflows/module8c-index-cleanup.yml
   workflow_dispatch:
@@ -12,13 +12,13 @@ permissions:
   contents: write
 
 jobs:
-  finalize:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out production branch
         uses: actions/checkout@v4
         with:
-          ref: module-4-reward-engine
+          ref: main
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -26,58 +26,52 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Wire verified runtime assets and session limit
+      - name: Remove duplicate chat controllers
         run: |
           node - <<'NODE'
           const fs = require('fs');
-
           const indexPath = 'index.html';
           let html = fs.readFileSync(indexPath, 'utf8');
-          html = html.replace(/chatearn-auth-session-fix\.js\?v=[^"']+/g, 'chatearn-auth-session-fix.js?v=8.0.4');
-          html = html.replace(/chatearn-chat-ads\.js\?v=[^"']+/g, 'chatearn-chat-ads.js?v=8.4.0');
-          html = html.replace(/chatearn-chat-runtime-integrity\.js\?v=[^"']+/g, 'chatearn-chat-runtime-integrity.js?v=8.5.0');
 
-          const requiredScripts = [
-            '<script src="./assets/js/chatearn-chat-withdraw-cta.js?v=8.0.1" defer></script>',
-            '<script src="./assets/js/chatearn-first-session-limit.js?v=8.0.1" defer></script>',
-            '<script src="./assets/js/chatearn-chat-ads.js?v=8.4.0" defer></script>',
-            '<script src="./assets/js/chatearn-chat-runtime-integrity.js?v=8.5.0" defer></script>'
+          const duplicatePatterns = [
+            /\s*<script src="\.\/assets\/js\/chatearn-chat-withdraw-cta\.js\?v=[^"]+" defer><\/script>/g,
+            /\s*<script src="\.\/assets\/js\/chatearn-chat-ads\.js\?v=[^"]+" defer><\/script>/g,
+            /\s*<script src="\.\/assets\/js\/chatearn-first-session-limit\.js\?v=[^"]+" defer><\/script>/g
           ];
+          duplicatePatterns.forEach(pattern => { html = html.replace(pattern, ''); });
+
+          html = html.replace(
+            /chatearn-chat-runtime-integrity\.js\?v=[^"']+/g,
+            'chatearn-chat-runtime-integrity.js?v=8.6.0'
+          );
+
+          const runtimeTag = '<script src="./assets/js/chatearn-chat-runtime-integrity.js?v=8.6.0" defer></script>';
           const marker = '<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>';
-          if (!html.includes(marker)) throw new Error('Module 7 marker missing from index.html');
-          for (const tag of requiredScripts) {
-            if (!html.includes(tag)) html = html.replace(marker, `${tag}\n${marker}`);
-          }
-          fs.writeFileSync(indexPath, html);
+          if (!html.includes(marker)) throw new Error('Module 7 marker missing');
+          if (!html.includes(runtimeTag)) html = html.replace(marker, `${runtimeTag}\n${marker}`);
 
           const appPath = 'assets/js/chatearn-app.js';
           let app = fs.readFileSync(appPath, 'utf8');
-          app = app.replace('const MIN_WITHDRAW=40000,MAX_EARN=65000,SIGNUP_BONUS=10000;', 'const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;');
-          if (!app.includes('MAX_EARN=80000')) throw new Error('Unable to verify the 80000 first-session limit');
+          app = app.replace(/MAX_EARN=\d+/, 'MAX_EARN=80000');
+          if (!app.includes('MAX_EARN=80000')) throw new Error('80k session limit missing');
+
+          fs.writeFileSync(indexPath, html);
           fs.writeFileSync(appPath, app);
           NODE
 
-      - name: Run final static verification
+      - name: Verify clean production runtime
         run: |
-          ! grep -q 'chatearn-v6-2-rewards.css' index.html
-          ! grep -q 'chatearn-v6-2-3-final.js' index.html
-          grep -q 'chatearn-module7-admin.js' index.html
-          grep -q 'chatearn-auth-session-fix.js?v=8.0.4' index.html
-          grep -q 'chatearn-chat-withdraw-cta.js?v=8.0.1' index.html
-          grep -q 'chatearn-first-session-limit.js?v=8.0.1' index.html
-          grep -q 'chatearn-chat-ads.js?v=8.4.0' index.html
-          grep -q 'chatearn-chat-runtime-integrity.js?v=8.5.0' index.html
-          grep -q "const VERSION = '8.5.0'" assets/js/chatearn-chat-runtime-integrity.js
+          ! grep -q 'chatearn-chat-withdraw-cta.js' index.html
+          ! grep -q 'chatearn-chat-ads.js' index.html
+          ! grep -q 'chatearn-first-session-limit.js' index.html
+          grep -q 'chatearn-chat-runtime-integrity.js?v=8.6.0' index.html
+          grep -q "const VERSION = '8.6.0'" assets/js/chatearn-chat-runtime-integrity.js
           grep -q 'MAX_EARN=80000' assets/js/chatearn-app.js
-          grep -q 'Quick earning task' assets/js/chatearn-chat-runtime-integrity.js
-          grep -q 'First earning session complete' assets/js/chatearn-first-session-limit.js
 
-      - name: Commit verified runtime wiring
+      - name: Commit production cleanup
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html assets/js/chatearn-app.js
-          git diff --cached --quiet || git commit -m 'Wire consolidated chat runtime integrity'
-          git push origin HEAD:module-4-reward-engine
-
-# Updated intentionally to trigger the consolidated runtime deployment.
+          git diff --cached --quiet || git commit -m 'Clean duplicate chat runtime controllers'
+          git push origin HEAD:main
