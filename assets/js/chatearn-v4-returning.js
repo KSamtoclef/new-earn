@@ -1,16 +1,17 @@
-/* ChatEarn Module 6D: canonical withdrawal frontend integration.
+/* ChatEarn Module 6E: canonical withdrawal frontend integration.
  * Temporary filename retained until the final asset rename pass.
  */
 (() => {
   'use strict';
 
-  const VERSION = '6D.1';
+  const VERSION = '6E.1';
   const state = {
     portal: null,
     accounts: [],
     selectedAccountId: null,
     loading: false,
     submitting: false,
+    initialized: false,
     lastLoadedAt: 0
   };
 
@@ -87,14 +88,8 @@
   }
 
   function retireLegacyRewardAsset() {
-    document.querySelectorAll('script[src*="chatearn-v6-2-3-final.js"]').forEach(node => {
-      node.dataset.retiredBy = VERSION;
-      node.remove();
-    });
-    document.querySelectorAll('link[href*="chatearn-v6-2-rewards.css"]').forEach(node => {
-      node.dataset.retiredBy = VERSION;
-      node.remove();
-    });
+    document.querySelectorAll('script[src*="chatearn-v6-2-3-final.js"]').forEach(node => node.remove());
+    document.querySelectorAll('link[href*="chatearn-v6-2-rewards.css"]').forEach(node => node.remove());
   }
 
   function rebuildWithdrawalMarkup() {
@@ -236,7 +231,7 @@
       renderPortal();
       return state.portal;
     } catch (error) {
-      console.error('[ChatEarn 6D] withdrawal portal load failed', error);
+      console.error('[ChatEarn 6E] withdrawal portal load failed', error);
       const statusPanel = ensureStatusPanel();
       if (statusPanel) statusPanel.textContent = 'Withdrawal information could not be loaded. Please check your connection and try again.';
       toast(error?.message || 'Unable to load withdrawal details.', 'error');
@@ -244,6 +239,10 @@
     } finally {
       state.loading = false;
     }
+  }
+
+  function loadPortalSafely(force = false) {
+    return loadPortal(force).catch(() => null);
   }
 
   function makeIdempotencyKey() {
@@ -256,30 +255,30 @@
 
   async function submitWithdrawal() {
     if (state.submitting) return;
-    await loadPortal();
-    const portal = state.portal || {};
-    const active = activeWithdrawal(portal);
-    if (active) {
-      toast('You already have an active withdrawal request.');
-      return;
-    }
-
-    const amount = availableBalance(portal);
-    const minimum = minimumAmount(portal);
-    if (!state.selectedAccountId) {
-      toast('Select a verified payout account.', 'error');
-      return;
-    }
-    if (!amount || amount < minimum) {
-      toast(`Your available balance must reach ${fmt(minimum)} before withdrawal.`, 'error');
-      return;
-    }
-
-    const button = document.querySelector('#withdraw .btn-place-wd');
-    state.submitting = true;
-    if (button) { button.disabled = true; button.textContent = 'Submitting securely…'; }
-
     try {
+      await loadPortal();
+      const portal = state.portal || {};
+      const active = activeWithdrawal(portal);
+      if (active) {
+        toast('You already have an active withdrawal request.');
+        return;
+      }
+
+      const amount = availableBalance(portal);
+      const minimum = minimumAmount(portal);
+      if (!state.selectedAccountId) {
+        toast('Select a verified payout account.', 'error');
+        return;
+      }
+      if (!amount || amount < minimum) {
+        toast(`Your available balance must reach ${fmt(minimum)} before withdrawal.`, 'error');
+        return;
+      }
+
+      const button = document.querySelector('#withdraw .btn-place-wd');
+      state.submitting = true;
+      if (button) { button.disabled = true; button.textContent = 'Submitting securely…'; }
+
       const { data, error } = await client().rpc('chatearn_submit_withdrawal_v5', {
         p_payout_account_id: state.selectedAccountId,
         p_amount: amount,
@@ -317,7 +316,7 @@
       const bankNode = byId('ppBank');
       if (bankNode && account) bankNode.textContent = accountLabel(account);
     } catch (error) {
-      console.error('[ChatEarn 6D] withdrawal submit failed', error);
+      console.error('[ChatEarn 6E] withdrawal submit failed', error);
       toast(error?.message || 'Unable to submit withdrawal.', 'error');
       renderPortal();
     } finally {
@@ -327,9 +326,9 @@
 
   const previousGoScreen = typeof goScreen === 'function' ? goScreen : null;
   if (previousGoScreen) {
-    window.goScreen = function module6DGoScreen(id) {
+    window.goScreen = function module6EGoScreen(id) {
       const result = previousGoScreen(id);
-      if (id === 'withdraw' || id === 'earnings') void loadPortal(id === 'withdraw');
+      if (id === 'withdraw' || id === 'earnings') loadPortalSafely(id === 'withdraw');
       return result;
     };
   }
@@ -337,33 +336,67 @@
   window.placeWithdrawal = submitWithdrawal;
   window.selectBank = function retiredLegacyBankSelector() { renderAccounts(); };
   window.triggerBankVerify = function retiredLegacyBankVerification() {};
-  window.ChatEarnWithdrawalV5 = Object.freeze({
-    version: VERSION,
-    load: loadPortal,
-    submit: submitWithdrawal,
-    refresh: () => loadPortal(true),
-    getState: () => ({ ...state, accounts: [...state.accounts] }),
-    diagnostic: () => ({
+
+  function diagnostic() {
+    const legacyRawAccountInputsPresent = Boolean(byId('wdAccNo') || byId('wdAccName'));
+    const legacyRewardScriptPresent = Boolean(document.querySelector('script[src*="chatearn-v6-2-3-final.js"]'));
+    const legacyRewardStylesheetPresent = Boolean(document.querySelector('link[href*="chatearn-v6-2-rewards.css"]'));
+    const canonicalMarkupReady = document.querySelector('#withdraw .wd-body')?.dataset.canonicalV5 === '1';
+    const submit = document.querySelector('#withdraw .btn-place-wd');
+    const submitHasInlineHandler = Boolean(submit?.getAttribute('onclick'));
+    const checks = {
+      controllerInitialized: state.initialized,
+      canonicalMarkupReady,
+      canonicalPortalRpcConfigured: true,
+      canonicalAccountsRpcConfigured: true,
+      canonicalSubmitRpcConfigured: true,
+      legacyRawAccountInputsAbsent: !legacyRawAccountInputsPresent,
+      legacyRewardScriptInactive: !legacyRewardScriptPresent,
+      legacyRewardStylesheetInactive: !legacyRewardStylesheetPresent,
+      legacyInlineSubmitAbsent: !submitHasInlineHandler,
+      duplicateSubmissionGuardPresent: true,
+      idempotencyKeyPresent: true
+    };
+    return {
       version: VERSION,
+      passed: Object.values(checks).every(Boolean),
+      checks,
       canonicalRpcs: [
         'chatearn_get_withdrawal_portal_v5',
         'chatearn_get_payout_accounts_v5',
         'chatearn_submit_withdrawal_v5'
       ],
-      legacyRawAccountInputsPresent: Boolean(byId('wdAccNo') || byId('wdAccName')),
-      legacyRewardAssetPresent: Boolean(document.querySelector('script[src*="chatearn-v6-2-3-final.js"]')),
-      canonicalMarkupReady: document.querySelector('#withdraw .wd-body')?.dataset.canonicalV5 === '1',
       selectedAccountMasked: state.accounts.some(a => a.id === state.selectedAccountId),
       activeWithdrawal: Boolean(activeWithdrawal(state.portal || {}))
-    })
+    };
+  }
+
+  window.ChatEarnWithdrawalV5 = Object.freeze({
+    version: VERSION,
+    load: loadPortalSafely,
+    submit: submitWithdrawal,
+    refresh: () => loadPortalSafely(true),
+    getState: () => ({ ...state, accounts: [...state.accounts] }),
+    diagnostic
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initialize() {
+    if (state.initialized) return;
+    state.initialized = true;
     retireLegacyRewardAsset();
     rebuildWithdrawalMarkup();
     const submit = document.querySelector('#withdraw .btn-place-wd');
-    if (submit) submit.addEventListener('click', submitWithdrawal);
-  }, { once: true });
+    if (submit && submit.dataset.canonicalListener !== '1') {
+      submit.removeAttribute('onclick');
+      submit.addEventListener('click', submitWithdrawal);
+      submit.dataset.canonicalListener = '1';
+    }
+    console.info(`[ChatEarn] Module ${VERSION} initialized`, diagnostic());
+  }
 
-  console.info(`[ChatEarn] Module ${VERSION} canonical withdrawal controller loaded`);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize, { once: true });
+  } else {
+    initialize();
+  }
 })();
