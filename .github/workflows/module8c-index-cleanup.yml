@@ -1,0 +1,44 @@
+name: Module 8C Index Cleanup
+
+on:
+  push:
+    branches:
+      - module-4-reward-engine
+    paths:
+      - .github/workflows/module8c-index-cleanup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: module-4-reward-engine
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Rewrite index safely
+        run: node scripts/module8c-rewrite-index.mjs
+
+      - name: Verify legacy references are gone
+        run: |
+          ! grep -q 'chatearn-v6-2-rewards.css' index.html
+          ! grep -q 'chatearn-v6-2-3-final.js' index.html
+          grep -q 'chatearn-module7-admin.js' index.html
+
+      - name: Commit updated index
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Finalize Module 8C index cleanup'
+          git push origin HEAD:module-4-reward-engine
