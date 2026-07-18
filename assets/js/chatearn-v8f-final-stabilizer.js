@@ -1,90 +1,32 @@
-/* ChatEarn V8F — final UI, admin and offer stabilizer. */
+/* ChatEarn V8F.1 — lightweight UI and admin stabilizer. */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_V8F_STABILIZER__) return;
-  window.__CHAT_EARN_V8F_STABILIZER__ = true;
+  if (window.__CHAT_EARN_V8F1_STABILIZER__) return;
+  window.__CHAT_EARN_V8F1_STABILIZER__=true;
+  const VERSION='8F.1',byId=id=>document.getElementById(id);
 
-  const VERSION = '8F.0';
-  const byId = id => document.getElementById(id);
-  const getClient = () => {
-    try { if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) return supabaseClient; } catch (_) {}
-    return window.supabaseClient?.rpc ? window.supabaseClient : null;
-  };
+  function cleanEarningsPage(){const page=byId('earnings'),primary=page?.querySelector('.btn-withdraw');if(!primary)return;[...primary.parentElement.querySelectorAll('a,button')].forEach(n=>{if(n!==primary)n.remove()})}
 
-  function cleanEarningsPage() {
-    const page = byId('earnings');
-    if (!page) return;
-    const primary = page.querySelector('.btn-withdraw');
-    if (!primary) return;
-    const container = primary.parentElement;
-    [...container.querySelectorAll('a,button')].forEach(node => {
-      if (node !== primary) node.remove();
-    });
+  function cleanWithdrawal(){
+    const page=byId('withdraw'),direct=byId('ceDirectWithdrawalForm');if(!page||!direct)return;
+    page.querySelectorAll('.bank-options,#wdAccNo,#wdAccName,#bankVerifyStatus').forEach(n=>{const g=n.closest('.form-group');if(g)g.style.display='none';else n.style.display='none'});
+    page.querySelectorAll('.btn-place-wd').forEach(n=>{if(!direct.contains(n))n.style.display='none'});
+    const status=byId('withdrawalPortalStatus');if(status)status.style.display='none';
   }
 
-  function cleanWithdrawalLegacyUi() {
-    const page = byId('withdraw');
-    if (!page) return;
-    const direct = byId('ceDirectWithdrawalForm');
-    if (!direct) return;
-    page.querySelectorAll('.bank-options, #wdAccNo, #wdAccName, #bankVerifyStatus, .btn-place-wd').forEach(node => {
-      const group = node.closest('.form-group');
-      if (group) group.style.display = 'none';
-      else node.style.display = 'none';
-    });
+  function activateCanonicalTab(name,button){
+    document.querySelectorAll('[data-ce6-tab]').forEach(b=>b.classList.toggle('active',b===button));
+    document.querySelectorAll('#adminContent .admin-panel').forEach(p=>p.classList.remove('active'));
+    byId(`ce6-${name}`)?.classList.add('active');
+    if(name==='withdrawals')setTimeout(()=>window.ChatEarnAdminWithdrawalsV5?.refresh?.(),40);
+    if(name==='kyc')setTimeout(()=>window.ChatEarnAdminKyc?.refresh?.(),40);
   }
 
-  function improveOfferManager() {
-    const panel = byId('admin-offer-manager');
-    if (!panel || byId('ceV8FOfferGuide')) return;
-    const guide = document.createElement('div');
-    guide.id = 'ceV8FOfferGuide';
-    guide.className = 'admin-status-banner';
-    guide.innerHTML = '<b>Rotating offer system:</b> add several active offer URLs below. ChatEarn rotates fresh destinations between native chat cards, bottom banners and half-screen sheets as conversations continue. One active URL will naturally repeat if it is the only available destination.';
-    panel.prepend(guide);
-    window.ChatEarnV8DFlow?.enhanceAdmin?.();
-  }
+  function installAdminInterception(){const tabs=byId('adminTabs');if(!tabs||tabs.dataset.ceCanonicalIntercept==='1')return;tabs.dataset.ceCanonicalIntercept='1';tabs.addEventListener('click',event=>{const button=event.target.closest('[data-ce6-tab]');const name=button?.dataset.ce6Tab;if(!['withdrawals','kyc'].includes(name))return;event.preventDefault();event.stopImmediatePropagation();activateCanonicalTab(name,button)},true)}
 
-  function refreshCanonicalAdmin(tabName) {
-    if (tabName === 'withdrawals') window.ChatEarnAdminWithdrawalsV5?.refresh?.();
-    if (tabName === 'kyc') window.ChatEarnAdminKyc?.refresh?.();
-    if (tabName === 'offer-manager') setTimeout(improveOfferManager, 50);
-  }
-
-  document.addEventListener('click', event => {
-    const tab = event.target.closest('[data-tab]');
-    if (tab) setTimeout(() => refreshCanonicalAdmin(tab.dataset.tab), 40);
-  }, true);
-
-  const observer = new MutationObserver(records => {
-    let relevant = false;
-    for (const record of records) {
-      if (record.addedNodes.length || record.removedNodes.length) { relevant = true; break; }
-    }
-    if (!relevant) return;
-    queueMicrotask(() => {
-      cleanEarningsPage();
-      cleanWithdrawalLegacyUi();
-      improveOfferManager();
-    });
-  });
-
-  function boot() {
-    cleanEarningsPage();
-    cleanWithdrawalLegacyUi();
-    improveOfferManager();
-    observer.observe(document.body, { childList:true, subtree:true });
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true }); else boot();
-  window.ChatEarnV8FDiagnostic = () => ({
-    version: VERSION,
-    extraEarningsButtons: Math.max(0, (byId('earnings')?.querySelectorAll('.btn-withdraw ~ a, .btn-withdraw ~ button').length || 0)),
-    directWithdrawalVisible: Boolean(byId('ceDirectWithdrawalForm')),
-    adminWithdrawalReady: Boolean(window.ChatEarnAdminWithdrawalsV5),
-    adminKycReady: Boolean(window.ChatEarnAdminKyc),
-    offerManagerReady: Boolean(byId('admin-offer-manager')),
-    clientReady: Boolean(getClient())
-  });
-  console.info(`[ChatEarn] V8F stabilizer ${VERSION} loaded`);
+  function boot(){cleanEarningsPage();cleanWithdrawal();installAdminInterception();setTimeout(()=>{cleanEarningsPage();cleanWithdrawal();installAdminInterception()},500)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.addEventListener('pageshow',()=>setTimeout(boot,80));
+  window.ChatEarnV8FDiagnostic=()=>({version:VERSION,directWithdrawalVisible:Boolean(byId('ceDirectWithdrawalForm')),adminWithdrawalReady:Boolean(window.ChatEarnAdminWithdrawalsV5),adminKycReady:Boolean(window.ChatEarnAdminKyc),tabInterception:byId('adminTabs')?.dataset.ceCanonicalIntercept==='1'});
+  console.info(`[ChatEarn] Stabilizer ${VERSION} loaded`);
 })();
