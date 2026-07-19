@@ -1,4 +1,4 @@
-/* ChatEarn simplified admin navigation v1.0.0 */
+/* ChatEarn simplified admin navigation v1.1.0 */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_SIMPLIFIED_ADMIN_UI__) return;
@@ -12,6 +12,19 @@
     kyc: 'KYC',
     users: 'Registrations'
   };
+
+  function loadModule(src, flag) {
+    if (window[flag] || document.querySelector(`script[src^="${src}"]`)) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    document.head.appendChild(script);
+  }
+
+  function loadSupportModules() {
+    loadModule('./assets/js/chatearn-sponsored-creative-editor.js?v=1.0.0', '__CHAT_EARN_SPONSORED_CREATIVE_EDITOR__');
+    loadModule('./assets/js/chatearn-sponsored-theme-runtime.js?v=1.0.0', '__CHAT_EARN_SPONSORED_THEME_RUNTIME__');
+  }
 
   function simplify() {
     const tabs = document.getElementById('adminTabs');
@@ -49,6 +62,7 @@
 
   let attempts = 0;
   function boot() {
+    loadSupportModules();
     attempts += 1;
     if (simplify() || attempts >= 40) return;
     setTimeout(boot, 150);
@@ -64,7 +78,7 @@
   }
 
   window.ChatEarnSimplifiedAdmin = Object.freeze({
-    version: '1.0.0',
+    version: '1.1.0',
     simplify,
     sections: [...KEEP]
   });
