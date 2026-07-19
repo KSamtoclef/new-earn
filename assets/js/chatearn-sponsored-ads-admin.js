@@ -1,13 +1,17 @@
-/* ChatEarn Sponsored Ads Manager v1.1.0 */
+/* ChatEarn Sponsored Ads Manager v1.1.1 */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_SPONSORED_ADS_MANAGER__) return;
   window.__CHAT_EARN_SPONSORED_ADS_MANAGER__ = true;
 
-  const VERSION='1.1.0',deletedKey='ce_sponsored_ads_deleted_keys_v1';
+  const VERSION='1.1.1',deletedKey='ce_sponsored_ads_deleted_keys_v1';
   const byId=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const client=()=>{try{if(typeof supabaseClient!=='undefined'&& supabaseClient?.rpc)return supabaseClient}catch(_){}return window.supabaseClient?.rpc?window.supabaseClient:null};
+  const client=()=>{
+    if(window.ceAdminClient?.rpc)return window.ceAdminClient;
+    try{if(typeof supabaseClient!=='undefined'&&supabaseClient?.rpc)return supabaseClient}catch(_){}
+    return window.supabaseClient?.rpc?window.supabaseClient:null;
+  };
   const parse=v=>typeof v==='string'?JSON.parse(v):v;
   const loadDeleted=()=>{try{return new Set(JSON.parse(localStorage.getItem(deletedKey)||'[]'))}catch(_){return new Set()}};
   const saveDeleted=set=>localStorage.setItem(deletedKey,JSON.stringify([...set]));
@@ -15,7 +19,7 @@
   const makeKey=headline=>`${slug(headline)}-${Date.now().toString(36)}`;
   const encodeMeta=meta=>`CEAD1:${btoa(unescape(encodeURIComponent(JSON.stringify(meta))))}`;
   const decodeMeta=name=>{try{if(String(name||'').startsWith('CEAD1:'))return JSON.parse(decodeURIComponent(escape(atob(String(name).slice(6)))))}catch(_){}return{headline:String(name||'Sponsored activity'),description:'Open this sponsored activity to continue.',cta:'Open Now'};};
-  async function rpc(name,args={}){const c=client();if(!c)throw new Error('Admin connection is still loading.');const{data,error}=await c.rpc(name,args);if(error)throw error;return parse(data)}
+  async function rpc(name,args={}){const c=client();if(!c)throw new Error('Sponsored connection is still loading.');const{data,error}=await c.rpc(name,args);if(error)throw error;return parse(data)}
 
   async function getNextOffer(placement='chat_banner'){
     try{const offer=await rpc('chatearn_v4_get_unique_offer',{p_placement:placement,p_visitor_id:localStorage.getItem('ce_visitor_id'),p_session_id:sessionStorage.getItem('ce_session_id')});if(!offer?.available||!offer.url)return null;return{...offer,...decodeMeta(offer.name)}}catch(e){console.warn('Sponsored ad load:',e?.message||e);return null}
