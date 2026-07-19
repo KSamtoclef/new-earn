@@ -8,10 +8,14 @@
     s.defer = true;
     document.head.appendChild(s);
   }
+  const CANONICAL_REF = 'cqnovqvmxwmfngupgtov';
   let config = null;
   const client = () => {
-    try { if (typeof supabaseClient !== 'undefined') return supabaseClient; } catch (_) {}
-    return window.supabaseClient || window.ceAdminClient;
+    if (window.ceAdminClient?.rpc) return window.ceAdminClient;
+    const diag = window.ChatEarnSupabaseDiagnostic?.();
+    if (diag?.projectRef !== CANONICAL_REF) return null;
+    try { if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) return supabaseClient; } catch (_) {}
+    return window.supabaseClient?.rpc ? window.supabaseClient : null;
   };
   const okMessages = () => [...document.querySelectorAll('#chatBody .msg.outgoing')]
     .filter(x => !x.classList.contains('failed') && (x.querySelector('.msg-earn') || x.querySelector('.msg-status')?.textContent?.includes('✓✓')));
@@ -19,7 +23,7 @@
     const c = client();
     if (!c?.rpc) return null;
     const { data, error } = await c.rpc('chatearn_get_chat_task_config');
-    if (error) return null;
+    if (error) { console.warn('Task config load:', error.message || error); return null; }
     config = typeof data === 'string' ? JSON.parse(data) : data;
     return config;
   }
