@@ -4,13 +4,14 @@
   if (window.__CHAT_EARN_AUTH_SESSION_DURABLE__) return;
   window.__CHAT_EARN_AUTH_SESSION_DURABLE__ = true;
 
-  const VERSION = '8.2.0';
+  const VERSION = '8.3.0';
   const USER_CACHE_KEY = 'ce_last_verified_user_v82';
   const LOGOUT_KEY = 'ce_explicit_logout_v82';
   let lastUser = null;
   let resolving = null;
   let installed = false;
   let unsubscribe = null;
+  let autoOpenTimer = 0;
 
   const client = () => {
     try { if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth) return supabaseClient; } catch (_) {}
@@ -75,6 +76,56 @@
     return null;
   }
 
+  async function loadCanonicalProfile(options = {}) {
+    const user = await requireUser();
+    if (!user?.id) return null;
+    const supa = client();
+    if (!supa?.from) return null;
+    const retries = Math.max(0, Number(options.retries || 0));
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const { data, error } = await supa
+        .from('profiles')
+        .select('user_id,display_name,balance,chats,shares,day,day_earnings,kyc_done,kyc_pending,has_withdrawn,last_active_at,updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!error && data) {
+        try {
+          currentProfile = data;
+          userName = (data.display_name || user.user_metadata?.full_name || user.email || 'User').split(' ')[0];
+          totalBalance = Number(data.balance || 0);
+          replyCount = Number(data.chats || 0);
+          chatEarnings = Math.max(0, totalBalance - 10000);
+          document.getElementById('dashName').textContent = userName + '!';
+          updateBalance?.();
+        } catch (_) {}
+        return data;
+      }
+      lastError = error || new Error('Profile is still being prepared');
+      if (attempt < retries) await new Promise(resolve => setTimeout(resolve, 300 + attempt * 400));
+    }
+    throw lastError || new Error('Unable to load account profile');
+  }
+
+  function installCanonicalProfileLoader() {
+    window.loadProfile = loadCanonicalProfile;
+    try { loadProfile = loadCanonicalProfile; } catch (_) {}
+  }
+
+  function scheduleAutoOpenChat(delay = 500) {
+    clearTimeout(autoOpenTimer);
+    autoOpenTimer = window.setTimeout(() => {
+      try {
+        if (typeof openChat !== 'function') return;
+        const count = Array.isArray(window.FOREIGNERS) ? window.FOREIGNERS.length : 6;
+        const index = Math.floor(Math.random() * Math.max(1, count));
+        openChat(index);
+      } catch (error) {
+        console.warn('[ChatEarn] Auto-open chat delayed:', error?.message || error);
+      }
+    }, delay);
+  }
+
   async function verifiedRegister() {
     const supa = client();
     const name = document.getElementById('regName')?.value.trim() || '';
@@ -99,8 +150,9 @@
       syncUser(session.user);
       try { userName = (session.user.user_metadata?.full_name || name).split(' ')[0]; } catch (_) {}
       goScreen?.('loading');
-      const profilePromise = typeof loadProfile === 'function' ? loadProfile({ force:true, retries:3 }).catch(() => null) : Promise.resolve(null);
-      runLoadingSequence?.(profilePromise);
+      const profilePromise = loadCanonicalProfile({ retries:4 }).catch(() => null);
+      if (typeof runLoadingSequence === 'function') runLoadingSequence(profilePromise);
+      else profilePromise.finally(() => { goScreen?.('dashboard'); scheduleAutoOpenChat(500); });
       window.trackEvent?.('registration_success');
     } catch (error) {
       window.showToast?.(error.message || 'Registration failed.');
@@ -125,7 +177,10 @@
       syncUser(login.data.session.user);
       hideLogin();
       goScreen?.('dashboard');
-      if (typeof loadProfile === 'function') loadProfile({ force:true, retries:3 }).then(() => updateBalance?.()).catch(() => null);
+      await loadCanonicalProfile({ retries:4 });
+      updateBalance?.();
+      scheduleAutoOpenChat(550);
+      window.trackEvent?.('login_success');
     } catch (error) {
       if (errorNode) { errorNode.textContent = error.message || 'Unable to log in.'; errorNode.classList.add('show'); }
     } finally { if (button) { button.disabled = false; button.textContent = 'Log In & Continue →'; } }
@@ -145,6 +200,7 @@
   }
 
   function install() {
+    installCanonicalProfileLoader();
     window.doRegister = verifiedRegister;
     window.doLogin = verifiedLogin;
     wrapProtected('openChat');
@@ -168,7 +224,7 @@
       });
       unsubscribe = listener?.data?.subscription || true;
     }
-    resolveSession(3).catch(() => null);
+    resolveSession(3).then(user => { if (user?.id) loadCanonicalProfile({ retries:2 }).catch(() => null); }).catch(() => null);
   }
 
   window.ceExplicitUserLogout = async () => {
