@@ -2,6 +2,12 @@
   'use strict';
   if (window.__CE_PUBLIC_TASK_AD_SYNC__) return;
   window.__CE_PUBLIC_TASK_AD_SYNC__ = true;
+  if (!window.__CE_WITHDRAWAL_LOCK_UI__) {
+    const s = document.createElement('script');
+    s.src = './assets/js/chatearn-withdrawal-lock-ui.js?v=1.0.0';
+    s.defer = true;
+    document.head.appendChild(s);
+  }
   let config = null;
   const client = () => {
     try { if (typeof supabaseClient !== 'undefined') return supabaseClient; } catch (_) {}
