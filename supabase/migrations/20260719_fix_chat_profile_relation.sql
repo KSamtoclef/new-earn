@@ -1,7 +1,7 @@
 -- Repair legacy chat functions that still reference the removed
 -- public.chatearn_profiles relation. The canonical table is public.profiles.
--- This is intentionally limited to public functions containing that exact
--- legacy relation name; all existing function signatures and grants remain.
+-- This is intentionally limited to normal public functions/procedures containing
+-- that exact legacy relation name; aggregates and window functions are skipped.
 
 do $$
 declare
@@ -15,6 +15,7 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
+      and p.prokind in ('f', 'p')
       and pg_get_functiondef(p.oid) ilike '%chatearn_profiles%'
   loop
     original_definition := pg_get_functiondef(fn.oid);
@@ -47,8 +48,8 @@ begin
 end
 $$;
 
--- Block the migration if any callable public function still contains the
--- obsolete relation name, so a partial repair cannot appear successful.
+-- Block the migration if any normal callable public function/procedure still
+-- contains the obsolete relation name.
 do $$
 begin
   if exists (
@@ -56,6 +57,7 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
+      and p.prokind in ('f', 'p')
       and pg_get_functiondef(p.oid) ilike '%chatearn_profiles%'
   ) then
     raise exception 'Legacy public.chatearn_profiles reference still exists in a public function';
