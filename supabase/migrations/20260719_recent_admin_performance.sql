@@ -44,7 +44,16 @@ begin
             p.user_id,
             p.display_name,
             coalesce(u.email, '') as email,
-            coalesce(ps.visitor_id::text, '') as visitor_id,
+            coalesce(
+              (
+                select x2.visitor_id::text
+                from public.presence_sessions x2
+                where x2.user_id = p.user_id
+                order by x2.last_seen_at desc
+                limit 1
+              ),
+              ''
+            ) as visitor_id,
             true as registered,
             coalesce(p.chats, 0) as messages,
             coalesce(ps.session_count, 0) as sessions,
@@ -62,7 +71,6 @@ begin
           left join auth.users u on u.id = p.user_id
           left join lateral (
             select
-              max(x.visitor_id) as visitor_id,
               count(distinct x.session_id)::integer as session_count,
               sum(
                 greatest(
