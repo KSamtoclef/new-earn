@@ -1,4 +1,4 @@
-/* ChatEarn active admin navigation v1.3.0 */
+/* ChatEarn active admin navigation v1.4.0 */
 (() => {
   'use strict';
   if (window.__CHAT_EARN_SIMPLIFIED_ADMIN_UI__) return;
@@ -40,9 +40,9 @@
   }
 
   function loadSupportModules() {
-    loadModule('./assets/js/chatearn-sponsored-creative-editor.js?v=1.0.0', '__CHAT_EARN_SPONSORED_CREATIVE_EDITOR__');
     loadModule('./assets/js/chatearn-sponsored-theme-runtime.js?v=1.0.0', '__CHAT_EARN_SPONSORED_THEME_RUNTIME__');
     loadModule('./assets/js/chatearn-admin-premium-performance.js?v=1.0.0', '__CHAT_EARN_PREMIUM_ADMIN_OVERRIDE__');
+    loadModule('./assets/js/chatearn-live-manager-editor.js?v=1.0.0', '__CHAT_EARN_LIVE_MANAGER_EDITOR__');
   }
 
   function findTabContainers() {
@@ -151,7 +151,7 @@
   }
 
   window.ChatEarnSimplifiedAdmin = Object.freeze({
-    version: '1.3.0',
+    version: '1.4.0',
     simplify,
     sections: ['live', 'performance', 'sponsored ads', 'withdrawals', 'kyc', 'registrations']
   });
