@@ -4,7 +4,10 @@
   if (window.__CHAT_EARN_CANONICAL_RUNTIME_COORDINATOR__) return;
   window.__CHAT_EARN_CANONICAL_RUNTIME_COORDINATOR__ = true;
 
-  const VERSION = 'canonical-1.5.1';
+  window.SUPABASE_URL = 'https://cqnovqvmxwmfngupgtov.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxbm92cXZteHdtZm5ndXBndG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODA0NzQsImV4cCI6MjA5OTg1NjQ3NH0.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs';
+
+  const VERSION = 'canonical-1.5.2';
   const failures = new Map();
   const loaded = new Set();
   const registry = [
@@ -49,6 +52,7 @@
   window.ChatEarnModule7Diagnostic = () => ({
     version: VERSION,
     coordinatorReady: true,
+    supabaseProject: new URL(window.SUPABASE_URL).hostname.split('.')[0],
     loaded: Array.from(loaded),
     failures: Object.fromEntries(failures),
     sponsoredAds: window.ChatEarnSponsoredAds?.version || null,
