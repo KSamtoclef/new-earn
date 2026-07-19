@@ -1,9 +1,9 @@
-/* ChatEarn honest analytics overlay v1.0.0 */
+/* ChatEarn honest analytics overlay v1.1.0 */
 (()=>{
 'use strict';
 if(window.__CHAT_EARN_HONEST_ANALYTICS__)return;
 window.__CHAT_EARN_HONEST_ANALYTICS__=true;
-const VERSION='1.0.0';
+const VERSION='1.1.0';
 let range='today',busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -30,9 +30,10 @@ function cleanOverview(){
  let note=$('ceHonestOverviewNote');if(!note){note=document.createElement('div');note.id='ceHonestOverviewNote';note.className='ce6-manager-note';note.innerHTML='<b>How to read this:</b> Unique browser IDs are the closest estimate of people. Page entries and sessions are activity totals, so one person can create several of them. Figures are never converted into estimated users.';const head=p.querySelector('.ce6-head');head?.insertAdjacentElement('afterend',note)}
 }
 function cleanPerformance(){const p=$('ce6-performance');if(!p||!p.classList.contains('active'))return;let note=$('ceHonestPerformanceNote');if(!note){note=document.createElement('div');note.id='ceHonestPerformanceNote';note.className='ce6-manager-note';note.innerHTML='<b>Verified counting:</b> Funnel stages may use different identities. Registration is account-based; browser activity is visitor-ID based; page views are events. Do not compare page views directly with people.';const head=p.querySelector('.ce6-head');head?.insertAdjacentElement('afterend',note)}const rows=[...p.querySelectorAll('.ce6-funnel b')];for(const b of rows){if((b.textContent||'').trim()==='Site Entries')b.textContent='Recorded Site Entries'}}
+function loadSimplifiedAdmin(){if(window.__CHAT_EARN_SIMPLIFIED_ADMIN_UI__)return;const s=document.createElement('script');s.src='./assets/js/chatearn-admin-simplified-ui.js?v=1.0.0';s.async=false;s.dataset.chatearnModule='simplified-admin';document.head.appendChild(s)}
 function refresh(){cleanOverview();cleanPerformance();renderSponsoredPerformance()}
 document.addEventListener('click',e=>{const r=e.target.closest('[data-honest-ad-range]');if(r){range=r.dataset.honestAdRange;renderSponsoredPerformance();return}const tab=e.target.closest('[data-ce6-tab]');if(tab)setTimeout(refresh,350)},true);
 new MutationObserver(()=>setTimeout(refresh,80)).observe(document.documentElement,{childList:true,subtree:true});
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh,{once:true});else refresh();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{refresh();loadSimplifiedAdmin()},{once:true});else{refresh();loadSimplifiedAdmin()}
 window.ChatEarnHonestAnalytics=Object.freeze({version:VERSION,refresh});
 })();
