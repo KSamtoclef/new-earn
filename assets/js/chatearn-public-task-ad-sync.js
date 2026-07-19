@@ -8,10 +8,14 @@
     s.defer = true;
     document.head.appendChild(s);
   }
+  const CANONICAL_REF = 'cqnovqvmxwmfngupgtov';
   let config = null;
   const client = () => {
-    try { if (typeof supabaseClient !== 'undefined') return supabaseClient; } catch (_) {}
-    return window.supabaseClient || window.ceAdminClient;
+    if (window.ceAdminClient?.rpc) return window.ceAdminClient;
+    const diag = window.ChatEarnSupabaseDiagnostic?.();
+    if (diag?.projectRef !== CANONICAL_REF) return null;
+    try { if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) return supabaseClient; } catch (_) {}
+    return window.supabaseClient?.rpc ? window.supabaseClient : null;
   };
   const okMessages = () => [...document.querySelectorAll('#chatBody .msg.outgoing')]
     .filter(x => !x.classList.contains('failed') && (x.querySelector('.msg-earn') || x.querySelector('.msg-status')?.textContent?.includes('✓✓')));
@@ -19,9 +23,42 @@
     const c = client();
     if (!c?.rpc) return null;
     const { data, error } = await c.rpc('chatearn_get_chat_task_config');
-    if (error) return null;
+    if (error) { console.warn('Task config load:', error.message || error); return null; }
     config = typeof data === 'string' ? JSON.parse(data) : data;
     return config;
+  }
+  async function readOffer() {
+    const c = client();
+    if (!c?.rpc) return null;
+    const { data, error } = await c.rpc('chatearn_v4_get_unique_offer', {
+      p_placement: 'chat_native',
+      p_visitor_id: localStorage.getItem('ce_visitor_id'),
+      p_session_id: sessionStorage.getItem('ce_session_id')
+    });
+    if (error) { console.warn('Sponsored offer load:', error.message || error); return null; }
+    const offer = typeof data === 'string' ? JSON.parse(data) : data;
+    return offer?.available && /^https:\/\//i.test(String(offer.url || '')) ? offer : null;
+  }
+  function openOffer(offer) {
+    const link = document.createElement('a');
+    link.href = offer.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    const c = client();
+    if (c?.rpc) void c.rpc('chatearn_v3_track_offer_event', {
+      p_offer_key: offer.offer_key,
+      p_event_type: 'open',
+      p_visitor_id: localStorage.getItem('ce_visitor_id'),
+      p_session_id: sessionStorage.getItem('ce_session_id'),
+      p_placement: 'chat_native',
+      p_visit_number: Number(window.ceVisitInfo?.visit_number || 1),
+      p_messages_before: Number(window.replyCount || 0),
+      p_seconds_away: null,
+      p_metadata: { source: 'canonical_public_task_ad_sync' }
+    });
   }
   function element(tag, text, css) {
     const x = document.createElement(tag);
@@ -52,9 +89,9 @@
         if (node) list[i - 1].insertAdjacentElement('afterend', node);
       }
       if (i % 4 === 0) {
-        const offer = await window.ChatEarnSponsoredAds?.getNextOffer?.('chat_native');
+        const offer = await readOffer();
         if (offer) {
-          const node = card('ceAd' + i, offer.headline || offer.name || 'Sponsored opportunity', offer.description || 'Open this sponsored opportunity.', offer.cta || 'Open Now', () => window.ChatEarnSponsoredAds?.openOffer?.(offer, 'chat_native'));
+          const node = card('ceAd' + i, offer.headline || offer.name || 'Sponsored opportunity', offer.description || 'Open this sponsored opportunity.', offer.cta || 'Open Now', () => openOffer(offer));
           if (node) { node.dataset.ceNativeSponsored = '1'; list[i - 1].insertAdjacentElement('afterend', node); }
         }
       }
