@@ -1,652 +1,271 @@
-/* ChatEarn V6.1.5 — fast admin */
+/* ChatEarn Ads & Tasks Admin v1.0.0 */
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_V6_1_ADMIN__) return;
+  if (window.__CHAT_EARN_ADS_TASKS_ADMIN__) return;
+  window.__CHAT_EARN_ADS_TASKS_ADMIN__ = true;
+
+  /* Stop legacy admin extensions before DOMContentLoaded. */
   window.__CHAT_EARN_V6_1_ADMIN__ = true;
-
-  const SUPA_URL = window.SUPABASE_URL || 'https://dtjxcgzpwemdgdeinkcl.supabase.co';
-  const SUPA_KEY = window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0anhjZ3pwd2VtZGdkZWlua2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDg0ODQsImV4cCI6MjA5MzQ4NDQ4NH0.kGjtOZfK7onzr-3FVMuSljiJ3emllxtGdepxrFVUPPM';
-  const client = supabase.createClient(SUPA_URL, SUPA_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'chatearn-admin-v6-auth' }
-  });
-  window.ceAdminClient = client;
-
-  const state = {
-    tab: 'overview', range: 'today', journeyOffset: 0, userOffset: 0,
-    selected: { withdrawals: new Set(), kyc: new Set() },
-    cache: new Map(), shellReady: false, loading: false
-  };
-
-  const rpcInflight = new Map();
-  const rpcCache = new Map();
-
-  function rpcKey(name, args) {
-    return `${name}:${JSON.stringify(args || {})}`;
-  }
-
-  async function rpcCached(name, args = {}, ttlMs = 15000, timeoutMs = 20000) {
-    const key = rpcKey(name, args);
-    const cached = rpcCache.get(key);
-    if (cached && Date.now() - cached.at < ttlMs) return cached.value;
-    if (rpcInflight.has(key)) return rpcInflight.get(key);
-
-    const request = rpc(name, args, timeoutMs)
-      .then(value => {
-        rpcCache.set(key, { at: Date.now(), value });
-        return value;
-      })
-      .finally(() => rpcInflight.delete(key));
-
-    rpcInflight.set(key, request);
-    return request;
-  }
-
-  function invalidateManagerCache() {
-    for (const key of [...rpcCache.keys()]) {
-      if (key.startsWith('chatearn_v6_admin_manager_inventory:')
-          || key.startsWith('chatearn_v6_admin_offer_task_manager:')) {
-        rpcCache.delete(key);
-      }
-    }
-  }
+  window.__CHAT_EARN_V6_SPONSORED_ADS_UI__ = true;
+  window.__CHAT_EARN_SPONSORED_ADS_STABILITY__ = true;
+  window.__CHAT_EARN_HONEST_ANALYTICS__ = true;
+  window.__CHAT_EARN_MODULE_7B3__ = true;
+  window.__CHAT_EARN_MODULE_7C2__ = true;
+  window.__CHAT_EARN_SIMPLIFIED_ADMIN_UI__ = true;
+  window.__CHAT_EARN_LIVE_MANAGER_EDITOR__ = true;
 
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const fmt = n => Number(n || 0).toLocaleString();
-  const pct = n => `${Math.max(0, Math.min(100, Number(n || 0))).toFixed(1).replace('.0','')}%`;
-  const dur = n => {
-    const s = Math.max(0, Number(n || 0));
-    if (s < 60) return `${Math.round(s)}s`;
-    if (s < 3600) return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
-    return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+  const slug = v => String(v || 'ad').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'ad';
+  const palettes = {
+    emerald:['#16a34a','#f0fdf4','#14532d'], blue:['#2563eb','#eff6ff','#1e3a8a'],
+    purple:['#7c3aed','#faf5ff','#4c1d95'], orange:['#ea580c','#fff7ed','#7c2d12'],
+    rose:['#e11d48','#fff1f2','#881337'], gold:['#ca8a04','#fefce8','#713f12']
   };
-  const time = v => v ? new Date(v).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' }) : '—';
-  const notify = msg => window.showToast ? window.showToast(msg) : alert(msg);
 
-  async function rpc(name, args = {}, timeoutMs = 20000) {
-    const run = () => client.rpc(name, args);
-    const withTimeout = promise => Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(
-        () => reject(new Error(`${name} timed out after ${Math.round(timeoutMs / 1000)} seconds`)),
-        timeoutMs
-      ))
-    ]);
+  let client;
+  let offers = [];
+  let tasks = [];
+  let editingOffer = null;
 
-    let result = await withTimeout(run());
-    if (result.error && /jwt|session|auth/i.test(result.error.message || '')) {
-      await client.auth.refreshSession();
-      result = await withTimeout(run());
-    }
-    if (result.error) throw result.error;
-    return typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-  }
-
-  function showError(message = '') {
-    const el = $('adminError');
-    if (!el) return;
-    el.textContent = message;
-    el.style.display = message ? 'block' : 'none';
-  }
-
-  function setStatus(text, mode = 'connected') {
-    const t = $('adminRealtimeText');
-    const d = $('adminRealtimeDot');
-    if (t) t.textContent = text;
-    if (d) d.className = `admin-live-dot ${mode}`;
-    const u = $('adminLastUpdated');
-    if (u) u.textContent = `Updated ${new Date().toLocaleTimeString('en-NG',{timeZone:'Africa/Lagos'})} WAT`;
-  }
-
-  function ranges() {
-    return `<div class="ce6-ranges">${[
-      ['today','Today'],['yesterday','Yesterday'],['7d','Last 7 Days'],['30d','Last 30 Days']
-    ].map(([k,l]) => `<button data-range="${k}" class="${state.range===k?'active':''}">${l}</button>`).join('')}</div>`;
-  }
-
-  function head(title, withRange = true) {
-    return `<div class="ce6-head"><div><h2>${esc(title)}</h2><small>Real database activity · Africa/Lagos</small></div>${withRange?ranges():''}</div>`;
-  }
-
-  function card(value, label, sub = '') {
-    return `<div class="ce6-card"><b>${esc(value)}</b><span>${esc(label)}</span>${sub?`<small>${esc(sub)}</small>`:''}</div>`;
-  }
-
-  function qualityLabel(score) {
-    const n = Number(score || 0);
-    if (n >= 80) return ['Excellent','excellent'];
-    if (n >= 65) return ['Strong','strong'];
-    if (n >= 45) return ['Developing','developing'];
-    return ['Needs data','weak'];
-  }
-
-  function removeLegacyAdminUI() {
-    const tabs = $('adminTabs');
-    if (tabs) {
-      tabs.querySelectorAll(':scope > button').forEach(button => {
-        if (!button.hasAttribute('data-ce6-tab')) button.remove();
-      });
-    }
-    const content = $('adminContent');
-    if (content) {
-      content.querySelectorAll(':scope > .admin-panel').forEach(section => {
-        if (!section.id.startsWith('ce6-')) section.remove();
-      });
-    }
-  }
-
-  function guardAdminDOM() {
-    const tabs = $('adminTabs');
-    const content = $('adminContent');
-    if (!tabs || !content || window.__CE6_DOM_GUARD__) return;
-    window.__CE6_DOM_GUARD__ = true;
-    const observer = new MutationObserver(() => removeLegacyAdminUI());
-    observer.observe(tabs, { childList: true });
-    observer.observe(content, { childList: true });
-    removeLegacyAdminUI();
-  }
-
-  function buildShell() {
-    if (state.shellReady) { removeLegacyAdminUI(); return true; }
-    const tabs = $('adminTabs');
-    const content = $('adminContent');
-    if (!tabs || !content) return false;
-
-    tabs.innerHTML = [
-      ['overview','Overview'],['live','Live'],['journeys','Journeys'],['performance','Performance'],
-      ['offers','Offers & Tasks'],['withdrawals','Withdrawals'],['kyc','KYC'],['users','Users'],['system','System']
-    ].map(([k,l],i) => `<button type="button" class="admin-tab ${i===0?'active':''}" data-ce6-tab="${k}">${l}</button>`).join('');
-
-    content.querySelectorAll('.admin-panel').forEach(p => p.remove());
-    content.insertAdjacentHTML('beforeend', [
-      'overview','live','journeys','performance','offers','withdrawals','kyc','users','system'
-    ].map((k,i) => `<section class="admin-panel ${i===0?'active':''}" id="ce6-${k}"></section>`).join(''));
-
-    tabs.addEventListener('click', e => {
-      const button = e.target.closest('[data-ce6-tab]');
-      if (!button) return;
-      switchTab(button.dataset.ce6Tab, button);
+  function db() {
+    if (client) return client;
+    if (!window.supabase?.createClient || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) throw new Error('Admin connection is not ready.');
+    client = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'chatearn-ads-admin-auth'}
     });
-
-    content.addEventListener('click', handleClick);
-    content.addEventListener('change', handleChange);
-    content.addEventListener('submit', handleSubmit);
-    state.shellReady = true;
-    guardAdminDOM();
-    removeLegacyAdminUI();
-    return true;
+    window.ceAdminClient = client;
+    return client;
   }
 
-  function panel(name) { return $(`ce6-${name}`); }
-
-  async function switchTab(name, button) {
-    state.tab = name;
-    document.querySelectorAll('[data-ce6-tab]').forEach(b => b.classList.toggle('active', b === button));
-    document.querySelectorAll('#adminContent .admin-panel').forEach(p => p.classList.remove('active'));
-    panel(name)?.classList.add('active');
-    await load(name);
+  async function rpc(name, args={}) {
+    const {data,error} = await db().rpc(name,args);
+    if (error) throw error;
+    return typeof data === 'string' ? JSON.parse(data) : data;
   }
 
-  async function load(name = state.tab) {
-    if (state.loading) return;
-    state.loading = true;
-    showError('');
-    setStatus('Loading current data…','connecting');
-    try {
-      if (name === 'overview') await loadOverview();
-      else if (name === 'live') await loadLive();
-      else if (name === 'journeys') await loadJourneys();
-      else if (name === 'performance') await loadPerformance();
-      else if (name === 'offers') await loadOffers();
-      else if (name === 'withdrawals' || name === 'kyc') await loadQueue(name);
-      else if (name === 'users') await loadUsers();
-      else if (name === 'system') await loadSystem();
-      setStatus(state.tab==='live'?'Live · 10s refresh':'Ready · refresh on demand','connected');
-    } catch (error) {
-      showError(error.message || String(error));
-      setStatus('Refresh failed','disconnected');
-    } finally {
-      state.loading = false;
-    }
-  }
-
-  async function loadOverview() {
-    const d = await rpcCached('chatearn_v6_admin_overview_fast',{p_range:state.range},15000,12000);
-    const k = d.kpis || {}, x = d.detail || {}, c = d.conversion || {}, q = d.v6 || {};
-    const isFast = Boolean(d.fast_mode);
-    const [qlabel,qclass] = qualityLabel(q.engagement_quality_score);
-    panel('overview').innerHTML = head('Overview') + `${isFast?'<div class="ce6-manager-note">Fast live summary. Detailed historical calculations load only when you open Performance.</div>':''}` + `
-      <div class="ce6-quality-hero ${qclass}">
-        <div><small>ENGAGEMENT QUALITY</small><strong>${fmt(q.engagement_quality_score)}/100</strong><span>${qlabel}</span></div>
-        <div class="ce6-quality-grid">
-          ${card(dur(q.median_away_seconds),'Median away')}
-          ${card(fmt(q.meaningful_stays),'Meaningful stays')}
-          ${card(fmt(q.completed_cycles),'Completed cycles')}
-          ${card(fmt(q.offer_returns),'Offer returns')}
-        </div>
-      </div>
-      <div class="ce6-grid">
-        ${card(fmt(k.online_now),'Online now')}
-        ${card(fmt(k.unique_browsers),'Unique browsers')}
-        ${card(fmt(k.sessions),'Sessions')}
-        ${card(fmt(k.site_entries),'Site entries')}
-        ${card(fmt(k.registrations),'Registrations')}
-        ${card(fmt(k.returning_browsers),'Returning browsers')}
-        ${card(fmt(k.messages),'User messages')}
-        ${card(fmt(k.offer_opens),'Offer opens')}
-        ${card(fmt(k.offer_returns),'Offer returns')}
-        ${card(fmt(k.share_opens),'WhatsApp opens')}
-        ${card(fmt(k.withdrawals),'Withdrawals')}
-        ${card(fmt(k.processing_reached),'Processing reached')}
-      </div>
-      <h3 class="ce6-section-title">Activity quality</h3>
-      <div class="ce6-grid detail">
-        ${card(fmt(x.new_browsers),'New browsers',`${fmt(x.returning_seen)} previously seen`)}
-        ${card(fmt(x.registered_users),'Unique registrations',`${fmt(x.registration_starts)} started`)}
-        ${card(fmt(x.chat_users),'Active chat users',`${fmt(x.avg_messages_per_chatter)} avg messages`)}
-        ${card(fmt(x.unique_offer_openers),'Unique offer openers',`${fmt(x.offer_impressions)} impressions`)}
-        ${card(fmt(x.share_users),'WhatsApp users',`${fmt(x.share_returns)} returns`)}
-        ${card(fmt(x.withdrawal_users),'Withdrawal users',`${fmt(x.processing_users)} processing`)}
-        ${card(dur(x.avg_session_seconds),'Average session span',`${fmt(x.sessions_over_60s)} over 1 min`)}
-        ${card(fmt(x.active_registered_users),'Active registered',`${fmt(x.anonymous_active_users)} anonymous`)}
-      </div>
-      <h3 class="ce6-section-title">Conversion</h3>
-      <div class="ce6-conversions">
-        ${Object.entries(c).map(([key,value]) => `<div><b>${pct(value)}</b><span>${esc(key.replaceAll('_',' → '))}</span></div>`).join('')}
-      </div>`;
-  }
-
-  async function loadLive() {
-    const d = await rpc('chatearn_v6_admin_live',{p_limit:120});
-    panel('live').innerHTML = head('Live Visitors',false) + `<div class="admin-list">${
-      (d.rows || []).map(r => `<div class="admin-row"><div><b>${esc(r.display_name)}</b> <span class="admin-tag ${r.is_visible?'':'warn'}">${r.is_visible?'Visible':'Away'}</span>
-      <div class="admin-row-sub">${esc(r.page||'unknown')} · ${esc(r.device||'')} ${esc(r.browser||'')} · ${dur(r.session_seconds)} session · heartbeat ${dur(r.heartbeat_age)} ago</div></div></div>`).join('')
-      || '<div class="admin-empty">Nobody active in the last 10 minutes.</div>'
-    }</div>`;
-  }
-
-  function journeyText(r) {
-    const a = [];
-    if (r.registrations) a.push('Registered');
-    if (r.chat_opens) a.push(`Opened chat ${fmt(r.chat_opens)}×`);
-    if (r.messages) a.push(`Sent ${fmt(r.messages)} messages`);
-    if (r.offer_opens) a.push(`Opened ${fmt(r.offer_opens)} offers`);
-    if (r.offer_returns) a.push(`Returned ${fmt(r.offer_returns)}×`);
-    if (r.share_opens) a.push(`Opened WhatsApp ${fmt(r.share_opens)}×`);
-    if (r.withdrawal_submitted) a.push('Submitted withdrawal');
-    if (r.kyc_clicked) a.push('Opened KYC');
-    if (r.processing_reached) a.push('Reached processing');
-    return a.join(' → ') || 'Viewed the site';
-  }
-
-  async function loadJourneys() {
-    const d = await rpc('chatearn_v6_admin_journeys',{p_range:state.range,p_limit:25,p_offset:state.journeyOffset});
-    panel('journeys').innerHTML = head('User Journeys') + `<div class="admin-list">${
-      (d.rows || []).map(r => `<button class="ce6-journey" data-journey="${esc(r.identity_key)}"><div><b>${esc(r.display_name)}</b><small>${esc(r.email||r.visitor_id||'')}</small></div><p>${esc(journeyText(r))}</p><span>${dur(r.activity_span_seconds)} activity span · Open timeline →</span></button>`).join('')
-      || '<div class="admin-empty">No meaningful journeys.</div>'
-    }</div><div class="ce6-pager"><button data-page="prev" ${state.journeyOffset===0?'disabled':''}>Previous</button><button data-page="next" ${(d.rows||[]).length<25?'disabled':''}>Next</button></div><div id="ce6JourneyModal"></div>`;
-  }
-
-  async function openJourney(identity) {
-    const box = $('ce6JourneyModal');
+  function error(message='') {
+    const box = $('adminError');
     if (!box) return;
-    box.innerHTML = '<div class="ce6-modal"><p>Loading timeline…</p></div>';
-    const d = await rpc('chatearn_v6_admin_journey_detail',{p_identity:identity,p_range:state.range});
-    box.innerHTML = `<div class="ce6-modal"><button data-close-modal>×</button><h3>Detailed Journey</h3>${
-      (d.timeline||[]).map(x => `<div class="ce6-event"><time>${time(x.at)}</time><b>${esc(x.action)}</b><span>${esc(x.page||x.placement||'')}${x.seconds_away!=null?` · away ${dur(x.seconds_away)}`:''}</span></div>`).join('')
-      || '<p>No events.</p>'
-    }</div>`;
+    box.textContent = message;
+    box.style.display = message ? 'block' : 'none';
   }
 
-  async function loadPerformance() {
-    const [perfResult, managerResult] = await Promise.allSettled([
-      rpcCached('chatearn_v6_admin_performance',{p_range:state.range},30000,18000),
-      rpcCached('chatearn_v6_admin_offer_task_manager',{p_range:state.range},30000,18000)
-    ]);
-    const d = perfResult.status === 'fulfilled' ? perfResult.value : { funnel: [], pages: [] };
-    const m = managerResult.status === 'fulfilled' ? managerResult.value : { offers: [] };
-    if (perfResult.status === 'rejected' || managerResult.status === 'rejected') {
-      showError('Some detailed analytics timed out. The rest of the admin remains available; try a shorter date range.');
-    }
-    panel('performance').innerHTML = head('Performance') + `
-      <div class="ce6-two">
-        <div><h3>Funnel</h3>${(d.funnel||[]).map((x,i,a)=>`<div class="ce6-funnel"><b>${esc(x.stage)}</b><span>${fmt(x.value)}</span><i style="width:${a[0]?.value?Math.max(2,100*x.value/a[0].value):0}%"></i></div>`).join('')}</div>
-        <div><h3>Pages</h3>${(d.pages||[]).map(x=>`<div class="admin-row"><b>${esc(x.page)}</b><span>${fmt(x.views)} views · ${fmt(x.unique_visitors)} unique</span></div>`).join('')}</div>
+  function status(text, bad=false) {
+    if ($('adminRealtimeText')) $('adminRealtimeText').textContent = text;
+    if ($('adminRealtimeDot')) $('adminRealtimeDot').className = 'admin-live-dot ' + (bad ? 'error' : 'live');
+    if ($('adminLastUpdated')) $('adminLastUpdated').textContent = '';
+    if ($('adminAutoRefreshText')) $('adminAutoRefreshText').textContent = 'Manual refresh only';
+  }
+
+  function creative(offer={}) {
+    try {
+      const raw = offer.notes ?? offer.targeting?.notes;
+      const v = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (v && typeof v === 'object') return v;
+    } catch (_) {}
+    return {tag:'SPONSORED',headline:offer.name||'Sponsored opportunity',description:'Open this sponsored opportunity to continue.',cta:'Open Now',preset:'emerald'};
+  }
+
+  function shell() {
+    const content = $('adminContent');
+    if (!content) return;
+    content.innerHTML = `
+      <nav class="ce-mini-tabs"><button class="active" data-view="ads">Sponsored Ads</button><button data-view="tasks">Tasks</button></nav>
+      <section id="ceAdsView">
+        <div class="ce-page-head"><div><h2>Sponsored Ads</h2><p>Create and publish adverts shown inside ChatEarn.</p></div><button class="admin-btn primary" id="ceNewAd">Create Ad</button></div>
+        <div id="ceAdEditor" class="ce-editor" hidden></div>
+        <div class="ce-list-head"><h3>Campaigns</h3><button class="admin-btn" id="ceRefreshAds">Refresh</button></div>
+        <div id="ceAdsList" class="ce-stack"></div>
+      </section>
+      <section id="ceTasksView" hidden>
+        <div class="ce-page-head"><div><h2>Tasks</h2><p>Configure the earning task displayed to users.</p></div><button class="admin-btn primary" id="ceEditTask">Edit Task</button></div>
+        <div id="ceTaskEditor" class="ce-editor" hidden></div>
+        <div id="ceTaskList" class="ce-stack"></div>
+      </section>`;
+
+    document.querySelectorAll('.ce-mini-tabs button').forEach(btn => btn.onclick = () => switchView(btn.dataset.view));
+    $('ceNewAd').onclick = () => openAd();
+    $('ceRefreshAds').onclick = loadAll;
+    $('ceEditTask').onclick = openTask;
+  }
+
+  function switchView(view) {
+    document.querySelectorAll('.ce-mini-tabs button').forEach(b => b.classList.toggle('active', b.dataset.view===view));
+    $('ceAdsView').hidden = view !== 'ads';
+    $('ceTasksView').hidden = view !== 'tasks';
+  }
+
+  function adForm(offer=null) {
+    const c = creative(offer||{});
+    const selected = new Set(Array.isArray(offer?.placements) ? offer.placements : ['chat_native']);
+    return `<form id="ceAdForm">
+      <div class="ce-grid">
+        <label>Campaign name<input name="name" required maxlength="80" value="${esc(offer?.name||'')}"></label>
+        <label>Destination link<input name="url" type="url" required placeholder="https://..." value="${esc(offer?.url||'')}"></label>
+        <label>Sponsored tag<input name="tag" maxlength="24" value="${esc(c.tag||'SPONSORED')}"></label>
+        <label>Headline<input name="headline" required maxlength="90" value="${esc(c.headline||'')}"></label>
+        <label class="wide">Description<textarea name="description" required maxlength="220">${esc(c.description||'')}</textarea></label>
+        <label>Button text<input name="cta" required maxlength="40" value="${esc(c.cta||'Open Now')}"></label>
+        <label>Colour style<select name="preset">${Object.keys(palettes).map(k=>`<option value="${k}" ${c.preset===k?'selected':''}>${k[0].toUpperCase()+k.slice(1)}</option>`).join('')}</select></label>
+        <label>Priority<input name="order" type="number" min="1" max="100" value="${Number(offer?.display_order||10)}"></label>
+        <fieldset class="wide"><legend>Placement</legend>
+          <label><input type="checkbox" name="place" value="chat_native" ${selected.has('chat_native')||selected.has('all')?'checked':''}> In-chat card</label>
+          <label><input type="checkbox" name="place" value="chat_banner" ${selected.has('chat_banner')?'checked':''}> Bottom banner</label>
+          <label><input type="checkbox" name="place" value="chat_half_screen" ${selected.has('chat_half_screen')?'checked':''}> Half-screen advert</label>
+        </fieldset>
+        <label class="wide check"><input name="active" type="checkbox" ${offer ? (offer.active?'checked':'') : 'checked'}> Publish immediately</label>
       </div>
-      <h3 class="ce6-section-title">Offer engagement quality</h3>
-      <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Offer</th><th>Quality</th><th>Unique CTR</th><th>Return</th><th>Meaningful</th><th>Median away</th><th>Cycles</th></tr></thead><tbody>
-      ${(m.offers||[]).map(o=>`<tr><td>${esc(o.name)}</td><td><b>${fmt(o.quality_score)}/100</b></td><td>${pct(o.unique_ctr)}</td><td>${pct(o.return_rate)}</td><td>${pct(o.meaningful_rate)}</td><td>${dur(o.median_away_seconds)}</td><td>${fmt(o.completed_cycles)}</td></tr>`).join('')}
-      </tbody></table></div>`;
-  }
-
-  function offerForm(o={}) {
-    return `<form class="ce6-form" id="ce6OfferForm">
-      <input name="key" placeholder="offer_key" value="${esc(o.offer_key||'')}" ${o.offer_key?'readonly':''} required>
-      <input name="name" placeholder="Internal name" value="${esc(o.name||'')}" required>
-      <input name="url" type="url" placeholder="https://..." value="${esc(o.url||'')}" required>
-      <input name="order" type="number" min="1" max="100" value="${Number(o.display_order||10)}" title="Display order">
-      <select name="audience"><option value="all">All users</option><option value="new">New users</option><option value="returning">Returning users</option></select>
-      <input name="placements" value="${esc((o.placements||['all']).join(','))}" placeholder="all,dashboard,returning">
-      <input name="threshold" type="number" min="1" max="3600" value="${Number(o.quality_threshold_seconds||30)}" placeholder="Quality seconds">
-      <input name="maxExposure" type="number" min="1" max="100" value="${Number(o.max_exposures_per_user||1)}" placeholder="Max/user">
-      <input name="cooldown" type="number" min="0" max="720" value="${Number(o.cooldown_hours||0)}" placeholder="Cooldown hours">
-      <textarea name="notes" placeholder="Internal notes">${esc(o.notes||'')}</textarea>
-      <label><input name="active" type="checkbox" ${o.active!==false?'checked':''}> Active</label>
-      <button class="admin-btn primary">Save offer</button>
-      <button type="button" class="admin-btn" data-cancel-form>Cancel</button>
+      <div id="cePreview" class="ce-preview"></div>
+      <div class="ce-actions"><button class="admin-btn primary" type="submit">Save Advert</button><button class="admin-btn" type="button" id="ceCancelAd">Cancel</button></div>
     </form>`;
   }
 
-  function taskForm(t={}) {
-    return `<form class="ce6-form" id="ce6TaskForm">
-      <input name="key" placeholder="task_key" value="${esc(t.task_key||'')}" ${t.task_key?'readonly':''} required>
-      <input name="title" placeholder="Task title" value="${esc(t.title||'')}" required>
-      <input name="subtitle" placeholder="Description" value="${esc(t.subtitle||'')}">
-      <input name="button" placeholder="Button text" value="${esc(t.button_text||'Continue')}" required>
-      <select name="type">${['chat_continue','chat_new','chat_sprint','share','offer'].map(x=>`<option value="${x}" ${t.task_type===x?'selected':''}>${x}</option>`).join('')}</select>
-      <input name="required" type="number" min="1" max="100" value="${Number(t.required_count||1)}">
-      <input name="reward" type="number" min="0" value="${Number(t.reward_amount||0)}">
-      <input name="minvisit" type="number" min="1" value="${Number(t.min_visit||2)}">
-      <input name="order" type="number" min="1" max="100" value="${Number(t.display_order||10)}">
-      <input name="cooldown" type="number" min="0" max="720" value="${Number(t.cooldown_hours||0)}" placeholder="Cooldown hours">
-      <input name="maxDaily" type="number" min="1" max="100" value="${Number(t.max_daily_completions||1)}" placeholder="Daily max">
-      <input name="linkedOffer" value="${esc(t.linked_offer_key||'')}" placeholder="Optional linked offer key">
-      <textarea name="notes" placeholder="Internal notes">${esc(t.notes||'')}</textarea>
-      <label><input name="active" type="checkbox" ${t.active!==false?'checked':''}> Active</label>
-      <button class="admin-btn primary">Save task</button>
-      <button type="button" class="admin-btn" data-cancel-form>Cancel</button>
-    </form>`;
+  function openAd(offer=null) {
+    editingOffer = offer?.offer_key || null;
+    const box = $('ceAdEditor');
+    box.innerHTML = adForm(offer);
+    box.hidden = false;
+    $('ceCancelAd').onclick = () => { box.hidden=true; editingOffer=null; };
+    $('ceAdForm').onsubmit = saveAd;
+    $('ceAdForm').oninput = preview;
+    preview();
+    box.scrollIntoView({behavior:'smooth',block:'start'});
   }
 
-  async function loadOffers(force = false) {
-    if (force) invalidateManagerCache();
-    const d = await rpcCached('chatearn_v6_admin_manager_inventory',{},force ? 0 : 10000,15000);
-    state.cache.set('manager',d);
-    panel('offers').innerHTML = head('Offers & Tasks') + `
-      <div class="ce6-manager-actions"><button class="admin-btn primary" data-add-offer>Add offer</button><button class="admin-btn primary" data-add-task>Add task</button><button class="admin-btn" data-manager-refresh>Refresh manager</button></div><div class="ce6-manager-note">Move actions reorder the real database list. Delete removes unused records; records with history are safely removed from rotation and hidden while analytics remain intact.</div>
-      <div id="ce6Editor"></div>
-      <h3 class="ce6-section-title">Active & paused offers</h3>
-      <div class="ce6-manager-list">${(d.offers||[]).filter(o=>!o.archived_at).map(o=>{
-        const [label,cls]=qualityLabel(o.quality_score);
-        return `<article class="ce6-manager-card ${o.archived_at?'archived':''}">
-          <div class="ce6-manager-top"><div><b>${esc(o.name)}</b><small>${esc(o.offer_key)} · ${o.active?'Active':'Paused'}${o.archived_at?' · Archived':''}</small></div><span class="ce6-score ${o.active?'excellent':'weak'}">${o.active?'Active':'Paused'} · Position ${fmt(o.display_order)}</span></div>
-          <p>${esc(o.url)}</p>
-          <div class="ce6-metrics"><span>Position ${fmt(o.display_order)}</span><span>${fmt(o.total_events)} recorded events</span><span>${fmt(o.total_assignments)} linked assignments</span><span>${fmt(o.quality_threshold_seconds)}s quality threshold</span></div>
-          <div class="ce6-card-actions">
-            <button data-edit-offer="${esc(o.offer_key)}">Edit</button>
-            <button data-offer-action="${o.active?'pause':'resume'}" data-key="${esc(o.offer_key)}">${o.active?'Pause':'Resume'}</button>
-            <button data-offer-action="duplicate" data-key="${esc(o.offer_key)}">Duplicate</button>
-            <button data-offer-action="move_up" data-key="${esc(o.offer_key)}">↑</button>
-            <button data-offer-action="move_down" data-key="${esc(o.offer_key)}">↓</button>
-            <button data-offer-action="${o.archived_at?'restore':'archive'}" data-key="${esc(o.offer_key)}">${o.archived_at?'Restore':'Archive'}</button>
-            <button class="danger" data-offer-action="delete" data-key="${esc(o.offer_key)}">Delete</button>
-          </div>
-        </article>`;
-      }).join('')||'<div class="admin-empty">No active or paused offers.</div>'}</div>
-      <details class="ce6-archive-box">
-        <summary>Archived offers (${(d.offers||[]).filter(o=>o.archived_at).length})</summary>
-        <div class="ce6-manager-list">${(d.offers||[]).filter(o=>o.archived_at).map(o=>`<article class="ce6-manager-card archived">
-          <div class="ce6-manager-top"><div><b>${esc(o.name)}</b><small>${esc(o.offer_key)} · Archived</small></div><span class="ce6-score weak">Archived</span></div>
-          <p>${esc(o.url)}</p>
-          <div class="ce6-card-actions">
-            <button data-edit-offer="${esc(o.offer_key)}">Edit</button>
-            <button data-offer-action="restore" data-key="${esc(o.offer_key)}">Restore</button>
-            <button class="danger" data-offer-action="delete" data-key="${esc(o.offer_key)}">Delete</button>
-          </div>
-        </article>`).join('')||'<div class="admin-empty">No archived offers.</div>'}</div>
-      </details>
-      <h3 class="ce6-section-title">Active & paused tasks</h3>
-      <div class="ce6-manager-list">${(d.tasks||[]).filter(t=>!t.archived_at).map(t=>`<article class="ce6-manager-card">
-        <div class="ce6-manager-top"><div><b>${esc(t.title)}</b><small>${esc(t.task_key)} · ${esc(t.task_type)} · ${t.active?'Active':'Paused'}${t.archived_at?' · Archived':''}</small></div><span>${pct(t.completion_rate)} complete</span></div>
-        <p>${esc(t.subtitle||'')}</p>
-        <div class="ce6-metrics"><span>Position ${fmt(t.display_order)}</span><span>${fmt(t.assignments)} assignments</span><span>${fmt(t.completions)} completed</span><span>₦${fmt(t.reward_amount)} reward</span><span>${fmt(t.required_count)} required</span></div>
-        <div class="ce6-card-actions">
-          <button data-edit-task="${esc(t.task_key)}">Edit</button>
-          <button data-task-action="${t.active?'pause':'resume'}" data-key="${esc(t.task_key)}">${t.active?'Pause':'Resume'}</button>
-          <button data-task-action="duplicate" data-key="${esc(t.task_key)}">Duplicate</button>
-          <button data-task-action="move_up" data-key="${esc(t.task_key)}">↑</button>
-          <button data-task-action="move_down" data-key="${esc(t.task_key)}">↓</button>
-          <button data-task-action="${t.archived_at?'restore':'archive'}" data-key="${esc(t.task_key)}">${t.archived_at?'Restore':'Archive'}</button>
-          <button class="danger" data-task-action="delete" data-key="${esc(t.task_key)}">Delete</button>
-        </div>
-      </article>`).join('')||'<div class="admin-empty">No active or paused tasks.</div>'}</div>
-      <details class="ce6-archive-box">
-        <summary>Archived tasks (${(d.tasks||[]).filter(t=>t.archived_at).length})</summary>
-        <div class="ce6-manager-list">${(d.tasks||[]).filter(t=>t.archived_at).map(t=>`<article class="ce6-manager-card archived">
-          <div class="ce6-manager-top"><div><b>${esc(t.title)}</b><small>${esc(t.task_key)} · Archived</small></div><span>${pct(t.completion_rate)} complete</span></div>
-          <p>${esc(t.subtitle||'')}</p>
-          <div class="ce6-card-actions">
-            <button data-edit-task="${esc(t.task_key)}">Edit</button>
-            <button data-task-action="restore" data-key="${esc(t.task_key)}">Restore</button>
-            <button class="danger" data-task-action="delete" data-key="${esc(t.task_key)}">Delete permanently</button>
-          </div>
-        </article>`).join('')||'<div class="admin-empty">No archived tasks.</div>'}</div>
-      </details>`;
+  function preview() {
+    const f = $('ceAdForm'), p = $('cePreview');
+    if (!f || !p) return;
+    const colors = palettes[f.elements.preset.value] || palettes.emerald;
+    p.style.background = `linear-gradient(145deg,${colors[1]},#fff)`;
+    p.style.borderColor = colors[0]; p.style.color = colors[2];
+    p.innerHTML = `<small style="color:${colors[0]}">${esc(f.elements.tag.value||'SPONSORED')}</small><h3>${esc(f.elements.headline.value||'Your headline')}</h3><p>${esc(f.elements.description.value||'Your advert description')}</p><button type="button" style="background:${colors[0]}">${esc(f.elements.cta.value||'Open Now')} →</button>`;
   }
 
-  async function loadQueue(kind) {
-    const d = await rpc('chatearn_v6_admin_queue',{p_kind:kind,p_status:'pending',p_limit:50,p_offset:0});
-    state.selected[kind].clear();
-    panel(kind).innerHTML = head(kind==='kyc'?'KYC Queue':'Withdrawal Queue',false) + `
-      <div class="ce6-bulk"><label><input type="checkbox" data-select-all="${kind}"> Select page</label><span id="ce6Selected-${kind}">0 selected</span><button data-bulk="${kind}" data-status="approved">Approve</button><button class="danger" data-bulk="${kind}" data-status="rejected">Reject</button></div>
-      <div class="admin-list">${(d.rows||[]).map(r=>`<label class="admin-row ce6-select"><input type="checkbox" data-select="${kind}" value="${r.id}"><div><b>${esc(r.full_name||r.account_name||'User')}${kind==='withdrawals'?` · ₦${fmt(r.amount)}`:''}</b><div class="admin-row-sub">${esc(r.email||'')}${kind==='withdrawals'?` · ${esc(r.bank||'')} ${esc(r.masked_account||'')}`:` · ${r.external_opened?'External opened':'Not opened'}`}</div></div></label>`).join('')||'<div class="admin-empty">No pending records.</div>'}</div>`;
-  }
-
-  async function loadUsers() {
-    const search = $('ce6UserSearch')?.value || '';
-    const d = await rpc('chatearn_v6_admin_users',{p_search:search||null,p_limit:50,p_offset:state.userOffset});
-    panel('users').innerHTML = head('Users',false) + `<div class="ce6-user-tools"><input id="ce6UserSearch" placeholder="Search name or email" value="${esc(search)}"><button data-user-search>Search</button></div>
-      <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>User</th><th>Balance</th><th>Messages</th><th>Visits</th><th>Last active</th></tr></thead><tbody>${(d.rows||[]).map(u=>`<tr><td>${esc(u.full_name)}<br><small>${esc(u.email)}</small></td><td>₦${fmt(u.balance)}</td><td>${fmt(u.total_messages)}</td><td>${fmt(u.visit_count)}</td><td>${time(u.last_seen_at)}</td></tr>`).join('')}</tbody></table></div>`;
-  }
-
-  async function loadSystem() {
-    const d = await rpcCached('chatearn_v6_admin_system',{p_range:state.range,p_limit:150},15000,20000);
-    panel('system').innerHTML = head('System') + `<div class="admin-list">${(d.rows||[]).map(x=>`<div class="admin-row"><div><b>${esc(x.event_name||'System event')}</b><div class="admin-row-sub">${time(x.created_at)} · ${esc(x.page||'')}<br>${esc(JSON.stringify(x.metadata||{})).slice(0,500)}</div></div></div>`).join('')||'<div class="admin-empty">No system events.</div>'}</div>`;
-  }
-
-  async function bulk(kind,status) {
-    const ids = [...state.selected[kind]];
-    if (!ids.length) return alert('Select at least one record.');
-    if (ids.length > 500) return alert('Maximum 500 records.');
-    if (!confirm(`${status==='approved'?'Approve':'Reject'} ${ids.length} ${kind}?`)) return;
-    const note = status==='rejected' ? (prompt('Reason (optional):')||'') : '';
-    const d = await rpc('chatearn_v6_admin_bulk_review',{p_kind:kind,p_ids:ids,p_status:status,p_note:note||null});
-    notify(`${d.processed} processed${d.failed?` · ${d.failed} failed`:''}`);
-    await loadQueue(kind);
-  }
-
-  function updateSelected(kind) {
-    const el = $(`ce6Selected-${kind}`);
-    if (el) el.textContent = `${state.selected[kind].size} selected`;
-  }
-
-  async function handleClick(e) {
-    const range = e.target.closest('[data-range]');
-    if (range) { state.range=range.dataset.range; state.journeyOffset=0; await load(state.tab); return; }
-    const tabJourney = e.target.closest('[data-journey]');
-    if (tabJourney) { await openJourney(tabJourney.dataset.journey); return; }
-    if (e.target.closest('[data-close-modal]')) { $('ce6JourneyModal').innerHTML=''; return; }
-    const page = e.target.closest('[data-page]');
-    if (page) { state.journeyOffset=Math.max(0,state.journeyOffset+(page.dataset.page==='next'?25:-25)); await loadJourneys(); return; }
-    const bulkBtn = e.target.closest('[data-bulk]');
-    if (bulkBtn) { await bulk(bulkBtn.dataset.bulk,bulkBtn.dataset.status); return; }
-    if (e.target.closest('[data-manager-refresh]')) { await loadOffers(true); return; }
-    if (e.target.closest('[data-add-offer]')) { $('ce6Editor').innerHTML=offerForm(); return; }
-    if (e.target.closest('[data-add-task]')) { $('ce6Editor').innerHTML=taskForm(); return; }
-    if (e.target.closest('[data-cancel-form]')) { $('ce6Editor').innerHTML=''; return; }
-    const eo = e.target.closest('[data-edit-offer]');
-    if (eo) { const d=state.cache.get('manager'); const o=(d.offers||[]).find(x=>x.offer_key===eo.dataset.editOffer); $('ce6Editor').innerHTML=offerForm(o); return; }
-    const et = e.target.closest('[data-edit-task]');
-    if (et) { const d=state.cache.get('manager'); const t=(d.tasks||[]).find(x=>x.task_key===et.dataset.editTask); $('ce6Editor').innerHTML=taskForm(t); return; }
-    const oa = e.target.closest('[data-offer-action]');
-    if (oa) {
-      const action = oa.dataset.offerAction;
-      const key = oa.dataset.key;
-      if (['delete','archive'].includes(action) && !confirm(`${action} offer ${key}?`)) return;
-
-      const originalText = oa.textContent;
-      oa.disabled = true;
-      oa.textContent = 'Working…';
-
-      try {
-        const result = await rpc('chatearn_v6_admin_offer_action', {
-          p_offer_key: key,
-          p_action: action
-        });
-
-        notify(result?.message || `Offer ${String(result?.action || action).replaceAll('_', ' ')} completed.`);
-        invalidateManagerCache(); await loadOffers(true);
-      } catch (error) {
-        showError(error.message || String(error));
-        notify(error.message || 'Offer action failed.');
-      } finally {
-        oa.disabled = false;
-        oa.textContent = originalText;
-      }
-      return;
-    }
-    const ta = e.target.closest('[data-task-action]');
-    if (ta) {
-      const action = ta.dataset.taskAction;
-      const key = ta.dataset.key;
-      if (['delete','archive'].includes(action) && !confirm(`${action} task ${key}?`)) return;
-
-      const originalText = ta.textContent;
-      ta.disabled = true;
-      ta.textContent = 'Working…';
-
-      try {
-        const result = await rpc('chatearn_v6_admin_task_action', {
-          p_task_key: key,
-          p_action: action
-        });
-
-        const message = result?.message
-          || (result?.action === 'archive_instead_of_delete'
-            ? 'Task has activity history, so it was archived safely.'
-            : `Task ${String(result?.action || action).replaceAll('_', ' ')} completed.`);
-
-        notify(message);
-        invalidateManagerCache(); await loadOffers(true);
-      } catch (error) {
-        showError(error.message || String(error));
-        notify(error.message || 'Task action failed.');
-      } finally {
-        ta.disabled = false;
-        ta.textContent = originalText;
-      }
-      return;
-    }
-    if (e.target.closest('[data-user-search]')) { state.userOffset=0; await loadUsers(); }
-  }
-
-  function handleChange(e) {
-    const all = e.target.dataset.selectAll;
-    if (all) {
-      panel(all).querySelectorAll(`[data-select="${all}"]`).forEach(c => {
-        c.checked=e.target.checked;
-        c.checked?state.selected[all].add(c.value):state.selected[all].delete(c.value);
-      });
-      updateSelected(all);
-    }
-    const kind = e.target.dataset.select;
-    if (kind) {
-      e.target.checked?state.selected[kind].add(e.target.value):state.selected[kind].delete(e.target.value);
-      updateSelected(kind);
-    }
-  }
-
-  async function handleSubmit(e) {
-    if (e.target.id === 'ce6OfferForm') {
-      e.preventDefault();
-      const f = new FormData(e.target);
+  async function saveAd(e) {
+    e.preventDefault(); error('');
+    const f=e.currentTarget, button=f.querySelector('[type="submit"]');
+    const places=[...f.querySelectorAll('[name="place"]:checked')].map(x=>x.value);
+    if (!places.length) return error('Select at least one placement.');
+    const colors=palettes[f.elements.preset.value]||palettes.emerald;
+    const notes=JSON.stringify({tag:f.elements.tag.value.trim()||'SPONSORED',headline:f.elements.headline.value.trim(),description:f.elements.description.value.trim(),cta:f.elements.cta.value.trim()||'Open Now',preset:f.elements.preset.value,accent:colors[0],background:colors[1],text:colors[2]});
+    button.disabled=true; button.textContent='Saving…';
+    try {
       await rpc('chatearn_v6_admin_save_offer',{
-        p_offer_key:f.get('key'),p_name:f.get('name'),p_url:f.get('url'),
-        p_display_order:Number(f.get('order')||10),p_audience:f.get('audience'),
-        p_placements:String(f.get('placements')||'all').split(',').map(x=>x.trim()).filter(Boolean),
-        p_active:f.get('active')==='on',p_quality_threshold_seconds:Number(f.get('threshold')||30),
-        p_max_exposures_per_user:Number(f.get('maxExposure')||1),p_cooldown_hours:Number(f.get('cooldown')||0),
-        p_notes:f.get('notes')||null
+        p_offer_key:editingOffer||`${slug(f.elements.name.value)}-${Date.now().toString(36)}`,
+        p_name:f.elements.name.value.trim(),p_url:f.elements.url.value.trim(),p_display_order:Number(f.elements.order.value||10),
+        p_audience:'all',p_placements:places,p_active:f.elements.active.checked,p_quality_threshold_seconds:12,
+        p_max_exposures_per_user:10,p_cooldown_hours:0,p_notes:notes
       });
-      notify('Offer saved'); $('ce6Editor').innerHTML=''; invalidateManagerCache(); await loadOffers(true);
-    } else if (e.target.id === 'ce6TaskForm') {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      await rpc('chatearn_v6_admin_save_task',{
-        p_task_key:f.get('key'),p_title:f.get('title'),p_subtitle:f.get('subtitle')||'',
-        p_button_text:f.get('button'),p_task_type:f.get('type'),
-        p_required_count:Number(f.get('required')||1),p_reward_amount:Number(f.get('reward')||0),
-        p_min_visit:Number(f.get('minvisit')||2),p_display_order:Number(f.get('order')||10),
-        p_active:f.get('active')==='on',p_cooldown_hours:Number(f.get('cooldown')||0),
-        p_max_daily_completions:Number(f.get('maxDaily')||1),p_linked_offer_key:f.get('linkedOffer')||null,
-        p_notes:f.get('notes')||null
-      });
-      notify('Task saved'); $('ce6Editor').innerHTML=''; invalidateManagerCache(); await loadOffers(true);
-    }
+      $('ceAdEditor').hidden=true; editingOffer=null; await loadAll();
+    } catch(ex) { error(ex.message||String(ex)); }
+    finally { button.disabled=false; button.textContent='Save Advert'; }
   }
 
-  window.openAdmin = async function() {
-    const shell = $('adminShell');
-    if (!shell) return;
-    shell.classList.add('show');
-    document.body.style.overflow='hidden';
-    buildShell();
-    const {data} = await client.auth.getSession();
-    $('adminLoginBox').style.display=data?.session?'none':'block';
-    $('adminContent').style.display=data?.session?'block':'none';
-    if (data?.session) await load('overview');
-  };
+  function taskForm(task={}) {
+    return `<form id="ceTaskForm"><div class="ce-grid">
+      <label>Task title<input name="title" required maxlength="90" value="${esc(task.title||'Quick earning task')}"></label>
+      <label>Button text<input name="button" required maxlength="40" value="${esc(task.button_text||task.cta||'Start Task')}"></label>
+      <label class="wide">Description<textarea name="subtitle" required maxlength="220">${esc(task.subtitle||task.description||'Complete this task, then return and continue earning.')}</textarea></label>
+      <label>Task type<select name="type"><option value="offer">Sponsored offer</option><option value="external">External link</option></select></label>
+      <label>Linked advert<select name="offer"><option value="">Select advert</option>${offers.map(o=>`<option value="${esc(o.offer_key)}" ${task.linked_offer_key===o.offer_key?'selected':''}>${esc(o.name)}</option>`).join('')}</select></label>
+      <label>External link<input name="external" type="url" placeholder="https://..." value="${esc(task.external_url||'')}"></label>
+      <label>Show after messages<input name="trigger" type="number" min="1" max="100" value="${Number(task.trigger_message_count||3)}"></label>
+      <label>Reward amount<input name="reward" type="number" min="0" value="${Number(task.reward_amount||0)}"></label>
+      <label class="wide check"><input name="active" type="checkbox" ${task.active!==false?'checked':''}> Task active</label>
+    </div><div class="ce-actions"><button class="admin-btn primary" type="submit">Save Task</button><button class="admin-btn" type="button" id="ceCancelTask">Cancel</button></div></form>`;
+  }
 
-  window.closeAdmin = function() {
-    $('adminShell')?.classList.remove('show');
-    document.body.style.overflow='';
-    if (location.hash==='#admin') history.replaceState(null,'',location.pathname+location.search);
-  };
+  function openTask() {
+    const task=tasks[0]||{}; const box=$('ceTaskEditor');
+    box.innerHTML=taskForm(task); box.hidden=false;
+    $('ceCancelTask').onclick=()=>box.hidden=true;
+    $('ceTaskForm').onsubmit=saveTask;
+    box.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  async function saveTask(e) {
+    e.preventDefault(); error('');
+    const f=e.currentTarget, button=f.querySelector('[type="submit"]');
+    button.disabled=true; button.textContent='Saving…';
+    try {
+      await rpc('chatearn_v6_admin_save_task',{
+        p_task_key:'chat_task',p_title:f.elements.title.value.trim(),p_subtitle:f.elements.subtitle.value.trim(),
+        p_button_text:f.elements.button.value.trim(),p_task_type:f.elements.type.value,p_required_count:1,
+        p_reward_amount:Number(f.elements.reward.value||0),p_min_visit:1,p_display_order:10,p_active:f.elements.active.checked,
+        p_cooldown_hours:0,p_max_daily_completions:1,p_linked_offer_key:f.elements.offer.value||null,p_notes:'',
+        p_audience:'all',p_placement:'chat',p_trigger_message_count:Number(f.elements.trigger.value||3),
+        p_external_url:f.elements.external.value.trim()||null
+      });
+      $('ceTaskEditor').hidden=true; await loadAll();
+    } catch(ex) { error(ex.message||String(ex)); }
+    finally { button.disabled=false; button.textContent='Save Task'; }
+  }
+
+  function adRow(o) {
+    const c=creative(o);
+    return `<article class="ce-card"><div><h3>${esc(c.headline||o.name)} <span class="admin-tag ${o.active?'':'bad'}">${o.active?'Active':'Paused'}</span></h3><p>${esc(c.description||'')}</p><small>${esc(o.url||'')}</small></div><div class="ce-actions"><button class="admin-btn" data-edit="${esc(o.offer_key)}">Edit</button><button class="admin-btn" data-toggle="${esc(o.offer_key)}">${o.active?'Pause':'Resume'}</button><button class="admin-btn danger" data-archive="${esc(o.offer_key)}">Archive</button></div></article>`;
+  }
+
+  function taskRow(t) {
+    return `<article class="ce-card"><div><h3>${esc(t.title||'Quick earning task')} <span class="admin-tag ${t.active?'':'bad'}">${t.active?'Active':'Paused'}</span></h3><p>${esc(t.subtitle||t.description||'')}</p><small>${esc(t.task_type||'offer')} · after ${Number(t.trigger_message_count||3)} messages</small></div><div class="ce-actions"><button class="admin-btn" id="ceTaskEditRow">Edit</button></div></article>`;
+  }
+
+  async function loadAll() {
+    error(''); status('Loading…');
+    try {
+      const payload=await rpc('chatearn_v6_admin_manager_inventory');
+      offers=Array.isArray(payload?.offers)?payload.offers:[];
+      tasks=Array.isArray(payload?.tasks)?payload.tasks:[];
+      $('ceAdsList').innerHTML=offers.map(adRow).join('')||'<div class="admin-empty">No adverts created yet.</div>';
+      $('ceTaskList').innerHTML=tasks.map(taskRow).join('')||'<div class="admin-empty">No task configured yet.</div>';
+      document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openAd(offers.find(o=>o.offer_key===b.dataset.edit)));
+      document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const o=offers.find(x=>x.offer_key===b.dataset.toggle);try{await rpc('chatearn_v6_admin_offer_action',{p_offer_key:o.offer_key,p_action:o.active?'pause':'resume'});await loadAll();}catch(ex){error(ex.message||String(ex));}});
+      document.querySelectorAll('[data-archive]').forEach(b=>b.onclick=async()=>{try{await rpc('chatearn_v6_admin_offer_action',{p_offer_key:b.dataset.archive,p_action:'archive'});await loadAll();}catch(ex){error(ex.message||String(ex));}});
+      if ($('ceTaskEditRow')) $('ceTaskEditRow').onclick=openTask;
+      status('Ads and Tasks ready');
+    } catch(ex) { error(ex.message||String(ex)); status('Admin unavailable',true); }
+  }
+
+  async function authorised() {
+    const {data:{session}}=await db().auth.getSession();
+    if (!session) return false;
+    const {data,error:rpcError}=await db().rpc('chatearn_v3_admin_is_admin');
+    if (rpcError) throw rpcError;
+    return Boolean(data);
+  }
 
   window.adminLogin = async function() {
-    const email=$('adminEmail')?.value.trim(),password=$('adminPass')?.value||'',button=$('adminLoginBtn');
-    if (!email || !password) return showError('Enter administrator email and password.');
-    button.disabled=true; button.textContent='Signing in…';
+    error(''); const button=$('adminLoginBtn');
+    button.disabled=true; button.textContent='Opening…';
     try {
-      const {error}=await client.auth.signInWithPassword({email,password});
-      if (error) throw error;
-      await rpc('chatearn_v3_admin_is_admin');
-      $('adminLoginBox').style.display='none'; $('adminContent').style.display='block';
-      buildShell(); await load('overview');
-    } catch(error) {
-      await client.auth.signOut();
-      showError(error.message||String(error));
-    } finally { button.disabled=false; button.textContent='Open Admin Panel'; }
+      const {error:loginError}=await db().auth.signInWithPassword({email:$('adminEmail').value.trim(),password:$('adminPass').value});
+      if (loginError) throw loginError;
+      if (!await authorised()) throw new Error('Administrator access required.');
+      $('adminLoginBox').style.display='none'; $('adminContent').style.display='block'; shell(); await loadAll();
+    } catch(ex) { error(ex.message||String(ex)); }
+    finally { button.disabled=false; button.textContent='Open Admin Panel'; }
   };
 
-  window.adminLogout = async function() {
-    await client.auth.signOut();
-    $('adminContent').style.display='none'; $('adminLoginBox').style.display='block';
-  };
+  window.adminLogout = async function(){await db().auth.signOut();$('adminContent').style.display='none';$('adminLoginBox').style.display='block';status('Signed out');};
+  window.refreshAdmin = loadAll;
+  window.closeAdmin = function(){const shellEl=$('adminShell');if(shellEl)shellEl.classList.remove('open');};
+  window.adminSwitchTab = () => false;
 
-  let lastExternalRefreshAt = 0;
-  window.refreshAdmin = (options = {}) => {
-    const now = Date.now();
-    const silent = Boolean(options && options.silent);
-
-    if (document.hidden || state.loading) return Promise.resolve();
-
-    // The legacy page calls silent refresh every 10 seconds.
-    // Only Live needs that cadence. Every other tab refreshes manually or on tab change.
-    if (silent && state.tab !== 'live') return Promise.resolve();
-    if (silent && now - lastExternalRefreshAt < 10000) return Promise.resolve();
-
-    lastExternalRefreshAt = now;
-    rpcCache.clear();
-    return load(state.tab);
-  };
-  window.adminSwitchTab = (event,name,button) => { event?.preventDefault(); switchTab(name,button); return false; };
-
-  function init() {
-    const version=document.querySelector('.admin-brand small');
-    if(version)version.textContent='v6.1.5';
-    if(location.hash==='#admin') setTimeout(window.openAdmin,100);
-    window.addEventListener('hashchange',()=>{if(location.hash==='#admin')window.openAdmin();});
+  function styles() {
+    const s=document.createElement('style');
+    s.textContent=`#adminTabs,.admin-panel{display:none!important}.ce-mini-tabs{display:flex;gap:10px;margin-bottom:24px}.ce-mini-tabs button{border:1px solid #26372e;background:#111b16;color:#aebbb3;border-radius:14px;padding:13px 18px;font-weight:850;font-size:15px}.ce-mini-tabs button.active{background:#00d768;color:#031108;border-color:#00d768}.ce-page-head,.ce-list-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px}.ce-page-head h2,.ce-list-head h3{margin:0}.ce-page-head p{margin:5px 0 0;color:#819087;font-size:13px}.ce-stack{display:grid;gap:14px}.ce-card,.ce-editor{border:1px solid #244833;background:#0d1812;border-radius:18px;padding:18px}.ce-card{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.ce-card h3{margin:0 0 8px}.ce-card p{margin:0 0 8px;color:#aab5ae}.ce-card small{color:#748179;word-break:break-all}.ce-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.ce-grid label{display:grid;gap:7px;font-size:12px;font-weight:800;color:#aab5ae}.ce-grid input,.ce-grid textarea,.ce-grid select{width:100%;box-sizing:border-box;border:1px solid #26372e;background:#09110d;color:#fff;border-radius:12px;padding:13px;font:inherit}.ce-grid textarea{min-height:94px;resize:vertical}.ce-grid .wide,.ce-grid fieldset.wide{grid-column:1/-1}.ce-grid fieldset{border:1px solid #26372e;border-radius:14px;padding:14px;display:flex;gap:16px;flex-wrap:wrap}.ce-grid fieldset label,.ce-grid .check{display:flex;align-items:center;gap:8px}.ce-grid input[type=checkbox]{width:20px;height:20px}.ce-preview{margin-top:16px;border:2px solid;border-radius:18px;padding:20px}.ce-preview small{font-weight:900;letter-spacing:1.2px}.ce-preview h3{font-size:24px;margin:12px 0 8px}.ce-preview p{margin:0 0 16px}.ce-preview button{width:100%;border:0;border-radius:12px;padding:13px;color:#fff;font-weight:900}.ce-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.admin-btn.danger{background:#7f1d2d!important;border-color:#9f2940!important}@media(max-width:640px){.ce-grid{grid-template-columns:1fr}.ce-card,.ce-page-head{display:block}.ce-page-head .admin-btn{margin-top:14px}.ce-mini-tabs button{flex:1}}`;
+    document.head.appendChild(s);
   }
-  document.readyState==='loading'?document.addEventListener('DOMContentLoaded',init,{once:true}):init();
+
+  async function boot() {
+    styles();
+    try {
+      if (await authorised()) {
+        $('adminLoginBox').style.display='none'; $('adminContent').style.display='block'; shell(); await loadAll();
+      } else { status('Sign in to manage ads and tasks'); }
+    } catch(ex) { error(ex.message||String(ex)); status('Admin unavailable',true); }
+  }
+
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
 })();
