@@ -4,15 +4,15 @@
   if (window.__CHAT_EARN_CANONICAL_RUNTIME_COORDINATOR__) return;
   window.__CHAT_EARN_CANONICAL_RUNTIME_COORDINATOR__ = true;
 
-  const VERSION = 'canonical-1.4.9';
+  const VERSION = 'canonical-1.5.0';
   const failures = new Map();
   const loaded = new Set();
   const registry = [
     { key: 'sponsored-ads', flag: '__CHAT_EARN_SPONSORED_ADS_MANAGER__', src: './assets/js/chatearn-sponsored-ads-admin.js?v=1.1.0' },
-    { key: 'v6-sponsored-ads-ui', flag: '__CHAT_EARN_V6_SPONSORED_ADS_UI__', src: './assets/js/chatearn-v6-sponsored-ads-ui.js?v=1.2.0' },
+    { key: 'v6-sponsored-ads-ui', flag: '__CHAT_EARN_V6_SPONSORED_ADS_UI__', src: './assets/js/chatearn-v6-sponsored-ads-ui.js?v=1.3.0' },
     { key: 'sponsored-ads-stability', flag: '__CHAT_EARN_SPONSORED_ADS_STABILITY__', src: './assets/js/chatearn-sponsored-ads-stability.js?v=1.4.0' },
     { key: 'first-cycle-cap', flag: '__CHAT_EARN_FIRST_CYCLE_TASK_RUNTIME__', src: './assets/js/chatearn-first-cycle-and-task-runtime.js?v=1.1.0' },
-    { key: 'offers-sharing', flag: '__CHAT_EARN_V8D11_FLOW__', src: './assets/js/chatearn-v8d-offer-withdrawal-flow.js?v=8.11.0' },
+    { key: 'offers-sharing', flag: '__CHAT_EARN_V8D12_FLOW__', src: './assets/js/chatearn-v8d-offer-withdrawal-flow.js?v=8.12.0' },
     { key: 'withdrawal', flag: '__CHAT_EARN_V8E13_DIRECT_WITHDRAWAL__', src: './assets/js/chatearn-v8e-direct-withdrawal-flow.js?v=8.13.0' },
     { key: 'admin-withdrawals', flag: '__CHAT_EARN_MODULE_7B3__', src: './assets/js/chatearn-v7-admin-withdrawals.js?v=7.3.0' },
     { key: 'admin-kyc', flag: '__CHAT_EARN_MODULE_7C2__', src: './assets/js/chatearn-v7-admin-kyc.js?v=7.2.0' }
