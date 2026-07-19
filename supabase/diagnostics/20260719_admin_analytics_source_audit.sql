@@ -1,6 +1,7 @@
--- ChatEarn analytics source audit
+-- ChatEarn analytics source audit — schema discovery only
 -- Read-only: this script does not modify data or functions.
--- Run in Supabase SQL Editor, then send back all result grids.
+-- It intentionally avoids hard-coded table names so it cannot fail when
+-- analytics tables use project-specific names.
 
 -- 1) Current definitions of the admin analytics functions.
 select
@@ -20,7 +21,36 @@ where n.nspname = 'public'
   )
 order by p.proname;
 
--- 2) Analytics-related tables and their columns.
+-- 2) All public tables/views that look related to analytics.
+select
+  n.nspname as schema_name,
+  c.relname as relation_name,
+  case c.relkind
+    when 'r' then 'table'
+    when 'p' then 'partitioned table'
+    when 'v' then 'view'
+    when 'm' then 'materialized view'
+    else c.relkind::text
+  end as relation_type
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind in ('r','p','v','m')
+  and (
+    c.relname ilike '%event%'
+    or c.relname ilike '%analytic%'
+    or c.relname ilike '%presence%'
+    or c.relname ilike '%offer%'
+    or c.relname ilike '%assignment%'
+    or c.relname ilike '%session%'
+    or c.relname ilike '%visitor%'
+    or c.relname ilike '%profile%'
+    or c.relname ilike '%withdraw%'
+    or c.relname ilike '%share%'
+  )
+order by relation_name;
+
+-- 3) Columns for all likely analytics relations.
 select
   c.table_name,
   c.ordinal_position,
@@ -29,88 +59,54 @@ select
 from information_schema.columns c
 where c.table_schema = 'public'
   and (
-    c.table_name ilike 'chatearn%event%'
-    or c.table_name ilike 'chatearn%presence%'
-    or c.table_name ilike 'chatearn%offer%'
-    or c.table_name ilike 'chatearn%assignment%'
-    or c.table_name ilike 'chatearn%session%'
-    or c.table_name ilike 'chatearn%profile%'
-    or c.table_name ilike 'chatearn%withdraw%'
-    or c.table_name ilike 'chatearn%share%'
+    c.table_name ilike '%event%'
+    or c.table_name ilike '%analytic%'
+    or c.table_name ilike '%presence%'
+    or c.table_name ilike '%offer%'
+    or c.table_name ilike '%assignment%'
+    or c.table_name ilike '%session%'
+    or c.table_name ilike '%visitor%'
+    or c.table_name ilike '%profile%'
+    or c.table_name ilike '%withdraw%'
+    or c.table_name ilike '%share%'
   )
 order by c.table_name, c.ordinal_position;
 
--- 3) Today in Africa/Lagos: raw event totals versus unique identities.
-with bounds as (
-  select
-    (date_trunc('day', now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos') as start_at,
-    ((date_trunc('day', now() at time zone 'Africa/Lagos') + interval '1 day') at time zone 'Africa/Lagos') as end_at
-), e as (
-  select *
-  from public.chatearn_events
-  where created_at >= (select start_at from bounds)
-    and created_at < (select end_at from bounds)
-)
+-- 4) Functions that reference likely analytics concepts.
 select
-  event_name,
-  count(*) as raw_events,
-  count(distinct nullif(visitor_id,'')) as unique_visitor_ids,
-  count(distinct nullif(session_id,'')) as unique_sessions,
-  count(distinct user_id) as unique_users
-from e
-group by event_name
-order by raw_events desc, event_name;
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as arguments,
+  pg_get_functiondef(p.oid) as definition
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and (
+    pg_get_functiondef(p.oid) ilike '%site_enter%'
+    or pg_get_functiondef(p.oid) ilike '%landing_view%'
+    or pg_get_functiondef(p.oid) ilike '%offer_open%'
+    or pg_get_functiondef(p.oid) ilike '%offer_return%'
+    or pg_get_functiondef(p.oid) ilike '%presence%'
+    or pg_get_functiondef(p.oid) ilike '%visitor_id%'
+    or pg_get_functiondef(p.oid) ilike '%session_id%'
+  )
+order by p.proname;
 
--- 4) Today: duplicate site-entry concentration per browser identity.
-with bounds as (
-  select
-    (date_trunc('day', now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos') as start_at,
-    ((date_trunc('day', now() at time zone 'Africa/Lagos') + interval '1 day') at time zone 'Africa/Lagos') as end_at
-)
+-- 5) Lightweight row estimates for likely analytics relations.
 select
-  coalesce(user_id::text, nullif(visitor_id,''), nullif(session_id,''), 'unknown') as identity_key,
-  count(*) filter (where event_name in ('site_enter','landing_view')) as entry_events,
-  count(distinct nullif(session_id,'')) as sessions,
-  min(created_at) as first_seen,
-  max(created_at) as last_seen
-from public.chatearn_events
-where created_at >= (select start_at from bounds)
-  and created_at < (select end_at from bounds)
-group by 1
-having count(*) filter (where event_name in ('site_enter','landing_view')) > 0
-order by entry_events desc
-limit 100;
-
--- 5) Today: genuine offer impressions, opens and returns by offer.
-with bounds as (
-  select
-    (date_trunc('day', now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos') as start_at,
-    ((date_trunc('day', now() at time zone 'Africa/Lagos') + interval '1 day') at time zone 'Africa/Lagos') as end_at
-)
-select
-  offer_key,
-  count(*) filter (where event_type in ('impression','view','shown','assigned')) as views,
-  count(*) filter (where event_type in ('open','click')) as clicks,
-  count(*) filter (where event_type in ('return','returned')) as returns,
-  count(distinct coalesce(user_id::text, nullif(visitor_id,''), nullif(session_id,'')))
-    filter (where event_type in ('impression','view','shown','assigned')) as unique_viewers,
-  count(distinct coalesce(user_id::text, nullif(visitor_id,''), nullif(session_id,'')))
-    filter (where event_type in ('open','click')) as unique_clickers
-from public.chatearn_offer_events
-where created_at >= (select start_at from bounds)
-  and created_at < (select end_at from bounds)
-group by offer_key
-order by clicks desc, views desc;
-
--- 6) Current live-presence rows and heartbeat freshness.
-select
-  visitor_id,
-  user_id,
-  session_id,
-  page,
-  is_visible,
-  last_seen_at,
-  now() - last_seen_at as heartbeat_age
-from public.chatearn_presence
-order by last_seen_at desc
-limit 100;
+  schemaname,
+  relname as relation_name,
+  n_live_tup as estimated_rows,
+  last_analyze,
+  last_autoanalyze
+from pg_stat_user_tables
+where schemaname = 'public'
+  and (
+    relname ilike '%event%'
+    or relname ilike '%analytic%'
+    or relname ilike '%presence%'
+    or relname ilike '%offer%'
+    or relname ilike '%assignment%'
+    or relname ilike '%session%'
+    or relname ilike '%visitor%'
+  )
+order by estimated_rows desc, relation_name;
