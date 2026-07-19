@@ -2,6 +2,9 @@
 (() => {
   'use strict';
 
+  /* Prevent the cached legacy admin controller from starting. */
+  window.__CHAT_EARN_V6_1_ADMIN__ = true;
+
   const LEGACY_PROJECT = 'dtjxcgzpwemdgdeinkcl';
   const CONFIG_SOURCE = './assets/js/chatearn-module7-admin.js?v=8.1.1';
 
@@ -17,8 +20,8 @@
       if (request.status < 200 || request.status >= 300) return null;
 
       const source = request.responseText || '';
-      const urlMatch = source.match(/window\.SUPABASE_URL\s*=\s*['\"]([^'\"]+)['\"]/);
-      const keyMatch = source.match(/window\.SUPABASE_ANON_KEY\s*=\s*['\"]([^'\"]+)['\"]/);
+      const urlMatch = source.match(/window\.SUPABASE_URL\s*=\s*['"]([^'"]+)['"]/);
+      const keyMatch = source.match(/window\.SUPABASE_ANON_KEY\s*=\s*['"]([^'"]+)['"]/);
       if (!urlMatch || !keyMatch) return null;
       return { url: urlMatch[1], key: keyMatch[1] };
     } catch (error) {
@@ -43,11 +46,7 @@
     const wrappedCreateClient = (url, key, options) => {
       const requestedUrl = String(url || '');
       const useCanonical = !requestedUrl || requestedUrl.includes(LEGACY_PROJECT) || requestedUrl === config.url;
-      return originalCreateClient(
-        useCanonical ? config.url : url,
-        useCanonical ? config.key : key,
-        options
-      );
+      return originalCreateClient(useCanonical ? config.url : url, useCanonical ? config.key : key, options);
     };
     wrappedCreateClient.__ceCanonicalWrapped = true;
     window.supabase.createClient = wrappedCreateClient;
@@ -57,6 +56,15 @@
     projectRef: window.CHATEARN_CONFIG?.projectRef || null,
     canonical: Boolean(config)
   });
+
+  const load = (src) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    document.head.appendChild(script);
+  };
+  load('./assets/js/chatearn-v6-admin.js?v=ads-tasks-1.0.1');
+  load('./assets/js/chatearn-landing-cleanup.js?v=1.0.0');
 })();
 
 /* Microsoft Clarity */
