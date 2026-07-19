@@ -5,7 +5,7 @@
   window.__CHAT_EARN_CANONICAL_RUNTIME_COORDINATOR__ = true;
 
   window.SUPABASE_URL = 'https://cqnovqvmxwmfngupgtov.supabase.co';
-  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXAiLCJyZWYiOiJjcW5vdnF2bXh3bWZuZ3VwZ3RvdiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzg0MjgwNDc0LCJleHAiOjIwOTk4NTY0NzR9.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxbm92cXZteHdtZm5ndXBndG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODA0NzQsImV4cCI6MjA5OTg1NjQ3NH0.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs';
 
   const VERSION = 'canonical-1.5.3';
   const failures = new Map();
