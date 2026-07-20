@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__CHAT_EARN_CLEAN_CHAT__) return;
+  window.__CHAT_EARN_CLEAN_CHAT__ = true;
   const client = window.ChatEarn?.client;
   const partners = [
     ['alexlab102','Alex','🇺🇸','Hey, how is your day going?'],
@@ -24,12 +26,15 @@
   };
 
   function style() {
+    if (document.getElementById('cleanChatStyles')) return;
     const s = document.createElement('style');
+    s.id = 'cleanChatStyles';
     s.textContent = `.partner-list{display:grid;gap:10px;margin-top:14px}.partner{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-align:left}.avatar{width:45px;height:45px;border-radius:50%;display:grid;place-items:center;background:var(--card2);font-size:22px}.partner b{display:block}.partner small{color:var(--muted)}#chat{padding-bottom:86px}.chat-head{display:flex;align-items:center;gap:12px;padding:8px 0 14px;border-bottom:1px solid var(--line)}.chat-head .back{margin-right:auto}.chat-head strong{display:block}.chat-head small{color:var(--green2)}.messages{display:flex;flex-direction:column;gap:10px;padding:18px 0;min-height:55vh}.bubble{max-width:82%;padding:11px 13px;border-radius:16px;line-height:1.45;font-size:14px}.bubble.in{background:var(--card2);align-self:flex-start}.bubble.out{background:var(--green);color:#041108;align-self:flex-end}.earn{display:block;margin-top:4px;font-size:10px;font-weight:900}.composer{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:auto;display:flex;gap:8px;padding:10px 14px;background:#08110c;border-top:1px solid var(--line)}.composer input{flex:1}.send{width:52px;border:0;border-radius:14px;background:var(--green);font-weight:900}`;
     document.head.appendChild(s);
   }
 
   function build() {
+    if (document.getElementById('chat')) return;
     const dashboard = document.getElementById('dashboard');
     const empty = dashboard?.querySelector('.empty-state');
     if (empty) empty.innerHTML = `<div>💬</div><h3>Choose a chat partner</h3><p>Every successful reply is rewarded by the server.</p><div class="partner-list">${partners.map(p => `<button class="partner" data-partner="${p[0]}"><span class="avatar">${p[2]}</span><span><b>${p[1]}</b><small>Online now</small></span></button>`).join('')}</div>`;
@@ -97,9 +102,12 @@
     }
   }
 
-  window.addEventListener('DOMContentLoaded', () => {
-    if (!client) return;
+  function boot() {
+    if (!client || !document.getElementById('dashboard')) return;
     style(); build(); autoOpen();
     new MutationObserver(autoOpen).observe(document.getElementById('dashboard'), {attributes:true,attributeFilter:['class']});
-  }, {once:true});
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true});
+  else boot();
 })();
