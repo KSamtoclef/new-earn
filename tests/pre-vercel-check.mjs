@@ -3,29 +3,32 @@ import vm from 'node:vm';
 
 const requiredFiles = [
   'index.html',
+  'assets/css/app.css',
   'assets/js/config.js',
   'assets/js/app.js',
   'assets/js/auth.js',
-  'assets/js/chat.js',
+  'assets/js/chat.js'
+];
+
+const forbiddenFiles = [
   'assets/js/rewards.js',
   'assets/js/withdrawal.js',
   'assets/js/content.js',
   'assets/js/admin.js',
   'assets/js/stabilization.js',
-  'assets/js/admin-metrics.js',
-  'database/migrations/20260720_canonical_rpc_names.sql'
+  'assets/js/admin-metrics.js'
 ];
 
 const failures = [];
 const pass = message => console.log(`PASS: ${message}`);
 const fail = message => { failures.push(message); console.error(`FAIL: ${message}`); };
-const read = path => fs.readFileSync(path, 'utf8');
 const expect = (condition, message) => condition ? pass(message) : fail(message);
+const read = path => fs.readFileSync(path, 'utf8');
 
 for (const path of requiredFiles) expect(fs.existsSync(path), `${path} exists`);
+for (const path of forbiddenFiles) expect(!fs.existsSync(path), `${path} is removed`);
 
 for (const path of requiredFiles.filter(path => path.endsWith('.js'))) {
-  if (!fs.existsSync(path)) continue;
   try {
     new vm.Script(read(path), { filename: path });
     pass(`${path} has valid JavaScript syntax`);
@@ -39,78 +42,26 @@ const config = read('assets/js/config.js');
 const app = read('assets/js/app.js');
 const auth = read('assets/js/auth.js');
 const chat = read('assets/js/chat.js');
-const rewards = read('assets/js/rewards.js');
-const withdrawal = read('assets/js/withdrawal.js');
-const content = read('assets/js/content.js');
-const admin = read('assets/js/admin.js');
-const stabilization = read('assets/js/stabilization.js');
-const adminMetrics = read('assets/js/admin-metrics.js');
-const migration = read('database/migrations/20260720_canonical_rpc_names.sql');
+const active = [config, app, auth, chat].join('\n');
 
-expect(index.includes('./assets/js/config.js') && index.includes('./assets/js/app.js'), 'index loads canonical config and app entrypoints');
-expect(!config.includes('chat.js'), 'config does not load chat directly');
+expect(index.includes('Chat With <em>Foreigners</em>'), 'approved landing headline is present');
+expect(index.includes('id="registerForm"') && index.includes('id="loginForm"'), 'registration and login forms exist');
+expect(index.includes('id="partnerList"') && index.includes('id="messages"') && index.includes('id="composer"'), 'chat interface exists');
+expect(index.includes('id="fixedAdSlot"') && index.includes('id="randomAdSlot"'), 'fixed and random ad slots exist');
 
 const loadedModules = [...app.matchAll(/\.\/assets\/js\/([a-z0-9-]+\.js)/g)].map(match => match[1]);
-expect(new Set(loadedModules).size === loadedModules.length, 'app loader contains no duplicate modules');
-for (const module of ['auth.js','chat.js','rewards.js','withdrawal.js','content.js','admin.js','stabilization.js','admin-metrics.js']) {
-  expect(loadedModules.includes(module), `app loader includes ${module}`);
-}
-
-const allActive = [config, app, auth, chat, rewards, withdrawal, content, admin, stabilization, adminMetrics].join('\n');
-for (const legacy of ['chatearn-v3.js','chatearn-v4-returning.js','chatearn-v4-2.js','chatearn-module7-admin.js','dtjxcgzpwemdgdeinkcl']) {
-  expect(!allActive.includes(legacy), `no active reference to ${legacy}`);
-}
-expect(!/chatearn_v\d+_/i.test(allActive), 'active frontend contains no versioned RPC names');
-expect(config.includes('cqnovqvmxwmfngupgtov'), 'the c-prefixed canonical Supabase project is configured');
-
-for (const rpc of [
-  'chatearn_send_message',
-  'chatearn_request_withdrawal',
-  'chatearn_record_share_attempt',
-  'chatearn_create_kyc_request',
-  'chatearn_get_chat_task_config',
-  'chatearn_get_sponsored_offer',
-  'chatearn_track_sponsored_event',
-  'chatearn_admin_is_admin',
-  'chatearn_admin_save_offer',
-  'chatearn_admin_save_task',
-  'chatearn_admin_get_queue',
-  'chatearn_admin_review_records'
-]) {
-  expect(allActive.includes(rpc), `required canonical RPC ${rpc} is referenced`);
-}
-
-for (const oldName of [
-  'chatearn_v3_admin_is_admin',
-  'chatearn_v4_get_unique_offer',
-  'chatearn_v3_track_offer_event',
-  'chatearn_v6_admin_save_offer',
-  'chatearn_v6_admin_save_task',
-  'chatearn_v6_admin_queue_impl',
-  'chatearn_v6_admin_bulk_review_impl'
-]) {
-  expect(migration.includes(oldName), `migration renames ${oldName}`);
-}
-expect(migration.includes('pg_get_function_identity_arguments'), 'migration discovers exact PostgreSQL function signatures safely');
-expect(migration.includes('alter function public.%I(%s) rename to %I'), 'migration performs real renames instead of creating aliases');
-
-for (const id of ['landing','register','login','loading','dashboard','toast']) expect(index.includes(`id="${id}"`), `index contains #${id}`);
-for (const id of ['chat','messages','composer']) expect(chat.includes(`id="${id}"`), `chat builds #${id}`);
-for (const id of ['withdraw','sharewall','kyc','processing']) expect(withdrawal.includes(`id="${id}"`), `withdrawal builds #${id}`);
-
-expect(rewards.includes('40000'), 'withdrawal minimum is ₦40,000');
-expect(stabilization.includes('FIRST_LIMIT = 80000'), 'first-cycle earning lock is ₦80,000');
-expect(stabilization.includes('ACTIVE_WITHDRAWALS'), 'duplicate withdrawal guard is present');
-expect(stabilization.includes('verifyShareReturn'), 'return-based share verification is present');
-expect(stabilization.includes("document.addEventListener('click',shareGuard,true)"), 'share guard runs before the original click handler');
-expect(stabilization.includes('latestKyc'), 'KYC database verification is present');
-expect(stabilization.includes('continueGuard'), 'server-aware continue earning guard is present');
-expect(stabilization.includes('data-offer-action="edit"') && stabilization.includes('data-offer-action="toggle"') && stabilization.includes('data-offer-action="delete"'), 'admin ad edit, pause/resume and delete controls exist');
-expect(adminMetrics.includes('views') && adminMetrics.includes('clicks'), 'admin campaign metrics include views and clicks');
-expect(!withdrawal.includes('Account Verified'), 'withdrawal UI does not fake bank verification');
+expect(JSON.stringify(loadedModules) === JSON.stringify(['auth.js', 'chat.js']), 'runtime loads only auth and chat modules');
+expect(!/\.from\s*\(/.test(active), 'active runtime contains no Supabase table queries');
+expect(!/\.rpc\s*\(/.test(active), 'active runtime contains no Supabase RPC calls');
+expect(auth.includes('client.auth.signUp'), 'Supabase registration is enabled');
+expect(auth.includes('client.auth.signInWithPassword'), 'Supabase login is enabled');
+expect(chat.includes("mode: 'fixed'") && chat.includes("mode: 'random'"), 'ads are managed directly in code');
+expect(!active.includes('admin') && !active.includes('kyc_submissions') && !active.includes('withdrawals'), 'admin, KYC and withdrawal database logic are inactive');
+expect(config.includes('cqnovqvmxwmfngupgtov'), 'current Supabase Auth project remains configured');
 
 if (failures.length) {
   console.error(`\n${failures.length} check(s) failed.`);
   process.exit(1);
 }
-console.log('\nAll pre-Vercel repository checks passed.');
+
+console.log('\nAll auth-only frontend checks passed.');
