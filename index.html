@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="#08110c">
+  <title>ChatEarn</title>
+  <link rel="stylesheet" href="./assets/css/app.css?v=1">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="./assets/js/config.js?v=1" defer></script>
+  <script src="./assets/js/app.js?v=1" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <section id="landing" class="screen active">
+      <div class="brand">Chat<span>Earn</span></div>
+      <div class="hero-card">
+        <div class="badge">CHAT • CONNECT • EARN</div>
+        <h1>Chat with people worldwide and earn rewards.</h1>
+        <p>Create your account, start a guided conversation and track your earnings from one simple dashboard.</p>
+        <button data-open="register" class="primary">Create account</button>
+        <button data-open="login" class="secondary">Log in</button>
+      </div>
+    </section>
+
+    <section id="register" class="screen">
+      <button class="back" data-open="landing">← Back</button>
+      <div class="panel">
+        <h2>Create your account</h2>
+        <p>Enter your details to continue.</p>
+        <form id="registerForm">
+          <label>Full name<input id="regName" autocomplete="name" required></label>
+          <label>Email<input id="regEmail" type="email" autocomplete="email" required></label>
+          <label>Password<input id="regPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+          <button id="registerButton" class="primary" type="submit">Create account</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="login" class="screen">
+      <button class="back" data-open="landing">← Back</button>
+      <div class="panel">
+        <h2>Welcome back</h2>
+        <p>Log in to continue from your saved account.</p>
+        <form id="loginForm">
+          <label>Email<input id="loginEmail" type="email" autocomplete="email" required></label>
+          <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+          <button id="loginButton" class="primary" type="submit">Log in</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="loading" class="screen loading-screen">
+      <div class="spinner"></div>
+      <h2>Loading your account</h2>
+      <p id="loadingText">Connecting securely…</p>
+    </section>
+
+    <section id="dashboard" class="screen">
+      <header class="dashboard-head">
+        <div><small>WELCOME BACK</small><h2 id="userName">User</h2></div>
+        <button id="logoutButton" class="ghost">Log out</button>
+      </header>
+      <div class="balance-card">
+        <span>Available balance</span>
+        <strong id="balance">₦0</strong>
+        <small>Loaded directly from your account.</small>
+      </div>
+      <div class="stats">
+        <div><span>Chats</span><strong id="chatCount">0</strong></div>
+        <div><span>Account</span><strong id="accountStatus">Active</strong></div>
+      </div>
+      <div class="empty-state">
+        <div>💬</div>
+        <h3>Chat is the next module</h3>
+        <p>Your login, session and profile are now separated from all old code.</p>
+      </div>
+    </section>
+  </main>
+  <div id="toast" role="status"></div>
+</body>
+</html>
