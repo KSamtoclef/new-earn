@@ -1,0 +1,36 @@
+name: Apply ordered bootstrap
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-bootstrap.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update index loader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>','')
+          old='''<script src="./assets/js/chatearn-app.js?v=10.0.0" defer></script>
+          <script src="./assets/js/chatearn-v4-2.js?v=10.0.0" defer></script>
+          <script src="./assets/js/chatearn-auth-session-fix.js?v=10.0.0" defer></script>
+          <script src="./assets/js/chatearn-auth-watchdog.js?v=11.0.0" defer></script>'''
+          new='<script src="./assets/js/bootstrap.js?v=12" defer></script>'
+          if old not in s:
+              raise SystemExit('Expected old loader block not found')
+          s=s.replace(old,new)
+          p.write_text(s)
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "Use ordered frontend bootstrap"
+          git push
