@@ -14,8 +14,4 @@
       }
     })
   });
-  const chat = document.createElement('script');
-  chat.src = './assets/js/chat.js?v=1';
-  chat.defer = true;
-  document.head.appendChild(chat);
 })();
