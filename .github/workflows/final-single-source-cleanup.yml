@@ -1,0 +1,75 @@
+name: Final single-source cleanup
+on:
+  push:
+    paths:
+      - '.github/workflows/final-single-source-cleanup.yml'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Remove duplicate systems and centralize links
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          index = Path('index.html')
+          html = index.read_text()
+          html = re.sub(r'\n\s*<!-- TRAFFIC LINKS — Dashboard bottom -->.*?<div style="height:20px;"></div>\n', '\n', html, count=1, flags=re.S)
+          html = re.sub(r'(\s*<button class="btn-withdraw" onclick="goScreen\(\'withdraw\'\)">💳 Withdraw My Earnings →</button>).*?(\n\s*</div>\n</div>\n\n<!-- ══ WITHDRAW ══ -->)', r'\1\2', html, count=1, flags=re.S)
+          html = html.replace('chatearn.css?v=10.0.0','chatearn.css?v=14')
+          html = html.replace('bootstrap.js?v=13','bootstrap.js?v=14')
+          index.write_text(html)
+
+          app = Path('assets/js/chatearn-app.js')
+          js = app.read_text()
+          js = js.replace("const KYC_URL = 'https://jikgykm.com/cl/a9f1535a330a2652';\nconst SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;", "const SITE_LINKS = Object.freeze({\n  primaryAd: '',\n  secondaryAd: '',\n  offerLink: '',\n  kycLink: 'https://jikgykm.com/cl/a9f1535a330a2652'\n});\nwindow.SITE_LINKS = SITE_LINKS;\nconst SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;\nconst NAV_KEY = 'chatearn_navigation_v1';")
+          js = js.replace("function goScreen(id) {", "function navigationKey(){ return `${NAV_KEY}_${authUser?.id || 'guest'}`; }\nfunction saveNavigation(){\n  if(!authUser) return;\n  localStorage.setItem(navigationKey(), JSON.stringify({screen:currentScreen,partner:currentPartner?.name||null}));\n}\nfunction goScreen(id) {")
+          js = js.replace("  currentScreen = id; scrollTo({top:0});", "  currentScreen = id; saveNavigation(); scrollTo({top:0});")
+          js = js.replace("window.open(KYC_URL,'_blank','noopener,noreferrer')", "window.open(SITE_LINKS.kycLink,'_blank','noopener,noreferrer')")
+          old_boot = "if(authUser){loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();goScreen('dashboard');}\n  else goScreen('landing');"
+          new_boot = "if(authUser){\n    loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();\n    let saved={};try{saved=JSON.parse(localStorage.getItem(navigationKey())||'{}')}catch{}\n    const allowed=new Set(['dashboard','chat','earnings','withdraw','sharewall','kyc','processing']);\n    if(saved.screen==='chat'&&saved.partner){const idx=PARTNERS.findIndex(p=>p.name===saved.partner);openChat(idx>=0?idx:0);}\n    else {const screen=allowed.has(saved.screen)?saved.screen:'dashboard';goScreen(screen);if(screen==='sharewall')renderShare();}\n  } else goScreen('landing');"
+          if old_boot not in js:
+            raise SystemExit('Expected auth boot block not found')
+          js = js.replace(old_boot,new_boot)
+          app.write_text(js)
+
+          ads = Path('assets/js/chatearn-v4-2.js')
+          adjs = ads.read_text()
+          adjs = adjs.replace("const ADS = [\n  { id:'bonus', title:\"Claim Today's Bonus Offer\", description:'Exclusive reward for active users', cta:'Claim →', url:'https://example.com/bonus', icon:'🎁', theme:'green', placement:'both', mode:'fixed', type:'native', returningOnly:false },\n  { id:'boost', title:'Boost Your Earnings Today', description:'Open this sponsored opportunity to continue', cta:'Open →', url:'https://example.com/boost', icon:'💳', theme:'blue', placement:'chat', mode:'random', type:'native', returningOnly:false },\n  { id:'report', title:'View Earnings Report', description:'See useful earning information', cta:'View →', url:'https://example.com/report', icon:'📊', theme:'purple', placement:'dashboard', mode:'fixed', type:'native', returningOnly:false },\n  { id:'special', title:'Special Sponsored Opportunity', description:'A limited offer selected for active members', cta:'Check Now →', url:'https://example.com/special', icon:'⭐', theme:'orange', placement:'chat', mode:'random', type:'inpush', returningOnly:true },\n  { id:'gold', title:'Recommended Sponsored Task', description:'Another opportunity for active chat users', cta:'View Offer →', url:'https://example.com/task', icon:'🔥', theme:'gold', placement:'chat', mode:'random', type:'overlay', returningOnly:true }\n];", "const links=window.SITE_LINKS||{};\nconst ADS = [\n  { id:'bonus', title:\"Claim Today's Bonus Offer\", description:'Exclusive reward for active users', cta:'Claim →', url:links.primaryAd||'', icon:'🎁', theme:'green', placement:'both', mode:'fixed', type:'native', returningOnly:false },\n  { id:'boost', title:'Boost Your Earnings Today', description:'Open this sponsored opportunity to continue', cta:'Open →', url:links.secondaryAd||'', icon:'💳', theme:'blue', placement:'chat', mode:'random', type:'native', returningOnly:false },\n  { id:'report', title:'View Earnings Report', description:'See useful earning information', cta:'View →', url:links.offerLink||'', icon:'📊', theme:'purple', placement:'dashboard', mode:'fixed', type:'native', returningOnly:false }\n];")
+          adjs = re.sub(r'function showLoginModal\(\).*?function boot\(\)\{mountDashboard\(\);bindAuthButtons\(\);new MutationObserver\(mountDashboard\)\.observe\(document\.body,\{childList:true,subtree:true\}\);\}', "function boot(){mountDashboard();new MutationObserver(mountDashboard).observe(document.body,{childList:true,subtree:true});}", adjs, count=1, flags=re.S)
+          adjs = adjs.replace("window.ChatEarnAds=Object.freeze({ADS,afterReply});window.openLogin=showLoginModal;window.closeLogin=hideLoginModal;", "window.ChatEarnAds=Object.freeze({ADS,afterReply});")
+          adjs = adjs.replace("function safeUrl(url){try{const parsed=new URL(url,location.origin);return ['http:','https:'].includes(parsed.protocol)?parsed.href:'#';}catch{return '#';}}", "function safeUrl(url){if(!url)return '';try{const parsed=new URL(url,location.origin);return ['http:','https:'].includes(parsed.protocol)?parsed.href:'';}catch{return '';}}")
+          adjs = adjs.replace("const root=document.createElement('a');root.href=safeUrl(ad.url);root.target='_blank';root.rel='noopener noreferrer sponsored';", "const root=document.createElement('a');const destination=safeUrl(ad.url);root.href=destination||'#';if(!destination){root.addEventListener('click',event=>event.preventDefault());root.setAttribute('aria-disabled','true');}root.target='_blank';root.rel='noopener noreferrer sponsored';")
+          ads.write_text(adjs)
+
+          bootstrap = Path('assets/js/bootstrap.js')
+          b = bootstrap.read_text().replace('chatearn-app.js?v=13','chatearn-app.js?v=14').replace('chatearn-v4-2.js?v=13','chatearn-v4-2.js?v=14')
+          bootstrap.write_text(b)
+          PY
+      - name: Validate JavaScript and source uniqueness
+        run: |
+          node --check assets/js/bootstrap.js
+          node --check assets/js/chatearn-app.js
+          node --check assets/js/chatearn-v4-2.js
+          test "$(grep -R "createClient(" -n assets/js | wc -l)" -eq 1
+          test "$(grep -R "document.addEventListener('click'" -n assets/js | wc -l)" -eq 0
+          ! grep -q 'TRAFFIC LINKS — Dashboard bottom' index.html
+          ! grep -q 'omg10.com' index.html
+          ! grep -q 'example.com' assets/js/chatearn-v4-2.js
+      - name: Commit final production cleanup
+        run: |
+          rm .github/workflows/final-single-source-cleanup.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Finalize single-source production runtime'
+          git push origin main
