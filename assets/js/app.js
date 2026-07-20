@@ -7,7 +7,8 @@
     './assets/js/withdrawal.js?v=3',
     './assets/js/content.js?v=3',
     './assets/js/admin.js?v=3',
-    './assets/js/stabilization.js?v=1'
+    './assets/js/stabilization.js?v=1',
+    './assets/js/admin-metrics.js?v=1'
   ];
   async function load(src) {
     await new Promise((resolve, reject) => {
