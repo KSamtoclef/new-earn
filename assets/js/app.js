@@ -16,5 +16,6 @@
   }
   (async () => {
     for (const src of files) await load(src);
+    if (document.readyState !== 'loading') window.dispatchEvent(new Event('DOMContentLoaded'));
   })().catch(error => console.error('[ChatEarn]', error));
 })();
