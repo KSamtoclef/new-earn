@@ -16,9 +16,56 @@ function balance(){return parseMoney(byId('dashBalance')?.textContent||byId('ear
 function activeScreen(){return document.querySelector('.screen.active')?.id||'';}
 function makeShareText(){const state=currentState();const url=`https://chat-earn.xyz?ref=${REF_CODE}`;return `💰 I just earned ${money(state.balance)} on ChatEarn chatting with foreigners!\n\nThis app pays Nigerians to chat with people from USA 🇺🇸, UK 🇬🇧, Canada 🇨🇦 and more.\n\n✅ Free to join\n✅ Earn ₦8,000–₦15,000 per reply\n✅ Withdraw to OPay/PalmPay\n\nSign up here 👇\n${url}\n${url}\n${url}\n\nI'm withdrawing mine now! 🔥`;}
 
+function injectChatStyles(){
+  if(byId('ceNaturalChatStyles'))return;
+  const style=document.createElement('style');style.id='ceNaturalChatStyles';
+  style.textContent=`
+    #chat .chat-body{padding:18px 14px 132px!important;display:flex;flex-direction:column;gap:5px}
+    #chat .msg-row{display:flex;flex-direction:column;align-items:flex-start;margin:3px 0}
+    #chat .msg-row.mine{align-items:flex-end}
+    #chat .msg-bubble{max-width:79%;padding:10px 13px;border-radius:17px;line-height:1.48;font-size:14px;box-shadow:none}
+    #chat .msg-theirs{border-bottom-left-radius:5px;background:#202020}
+    #chat .msg-mine{border-bottom-right-radius:5px;background:#00c853;color:#06140b}
+    #chat .msg-earned{margin-top:7px;font-size:10px;font-weight:800;color:inherit;opacity:.82}
+    #quickReplies{gap:7px;padding:7px 10px;background:linear-gradient(180deg,rgba(13,13,13,0),#111 45%)}
+    #quickReplies .quick-reply{padding:8px 12px;font-size:11px;border-color:rgba(0,200,83,.25);background:#191d1a;color:#69f0ae}
+    #chat .voice-bubble,#chat .vb-play,#chat .vb-wave,#chat .msg-actions,#chat .msg-react{display:none!important}
+    .ce-typing-row{display:flex;align-items:center;margin:5px 0 8px}
+    .ce-typing-bubble{display:flex;gap:4px;align-items:center;background:#202020;border-radius:17px 17px 17px 5px;padding:11px 14px;min-width:54px}
+    .ce-typing-bubble i{width:6px;height:6px;border-radius:50%;background:#8b938e;animation:ceTyping 1.1s infinite ease-in-out}
+    .ce-typing-bubble i:nth-child(2){animation-delay:.15s}.ce-typing-bubble i:nth-child(3){animation-delay:.3s}
+    @keyframes ceTyping{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-3px);opacity:1}}
+  `;
+  document.head.appendChild(style);
+}
+function removeVoiceDecorations(){document.querySelectorAll('.voice-bubble,.vb-play,.vb-wave').forEach(el=>el.remove());}
 function cleanEarnings(){const page=byId('earnings');if(!page)return;page.querySelectorAll('a').forEach(link=>link.remove());}
-function improveChat(){document.querySelectorAll('#quickReplies button').forEach(button=>button.classList.add('quick-reply'));const input=byId('chatInput');if(input){input.placeholder='Type your reply here...';input.autocomplete='off';}}
-function wrapSend(){if(typeof window.sendMsg!=='function'||window.sendMsg.__improved)return;const original=window.sendMsg;const wrapped=function(...args){const status=byId('chatStatus');const result=original.apply(this,args);if(status){status.textContent='typing…';setTimeout(()=>{status.textContent='🟢 Automated chat partner';},760);}return result;};wrapped.__improved=true;window.sendMsg=wrapped;}
+function improveChat(){
+  document.querySelectorAll('#quickReplies button').forEach(button=>button.classList.add('quick-reply'));
+  const input=byId('chatInput');if(input){input.placeholder='Message';input.autocomplete='off';input.setAttribute('enterkeyhint','send');}
+  removeVoiceDecorations();
+}
+function showTyping(){
+  const body=byId('chatBody');if(!body||byId('ceTypingIndicator'))return;
+  const row=document.createElement('div');row.id='ceTypingIndicator';row.className='ce-typing-row';
+  row.innerHTML='<div class="ce-typing-bubble"><i></i><i></i><i></i></div>';
+  body.appendChild(row);body.scrollTop=body.scrollHeight;
+}
+function hideTyping(){byId('ceTypingIndicator')?.remove();}
+function wrapSend(){
+  if(typeof window.sendMsg!=='function'||window.sendMsg.__improved)return;
+  const original=window.sendMsg;
+  const wrapped=function(...args){
+    const input=byId('chatInput');if(!input?.value.trim())return original.apply(this,args);
+    const status=byId('chatStatus');
+    const result=original.apply(this,args);
+    showTyping();
+    if(status)status.textContent='typing…';
+    setTimeout(()=>{hideTyping();if(status)status.textContent='Automated chat • online';},760);
+    return result;
+  };
+  wrapped.__improved=true;window.sendMsg=wrapped;
+}
 
 function rememberScreen(id){if(SAFE_SCREENS.has(id))localStorage.setItem(SCREEN_KEY,id);}
 function installNavigationMemory(){
@@ -60,8 +107,8 @@ function restoreJourney(){setTimeout(()=>{installNavigationMemory();if(activeScr
 function boot(){
   window.ChatEarnShareText=makeShareText;
   window.shareAgain=()=>window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(makeShareText())}`,'_blank','noopener,noreferrer');
-  cleanEarnings();improveChat();wrapSend();installNavigationMemory();simplifyShareScreen();improveProcessing();updateWithdrawalPrompt();restoreJourney();
-  new MutationObserver(()=>{cleanEarnings();improveChat();wrapSend();installNavigationMemory();simplifyShareScreen();improveProcessing();updateWithdrawalPrompt();}).observe(document.body,{childList:true,subtree:true,characterData:true});
+  injectChatStyles();cleanEarnings();improveChat();wrapSend();installNavigationMemory();simplifyShareScreen();improveProcessing();updateWithdrawalPrompt();restoreJourney();
+  new MutationObserver(()=>{cleanEarnings();improveChat();wrapSend();installNavigationMemory();simplifyShareScreen();improveProcessing();updateWithdrawalPrompt();hideTyping();}).observe(document.body,{childList:true,subtree:true,characterData:true});
   window.addEventListener('beforeunload',()=>rememberScreen(activeScreen()));
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
