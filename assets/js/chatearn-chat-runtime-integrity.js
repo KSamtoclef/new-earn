@@ -1,1 +1,0 @@
-/* Disabled: chat, limits and withdrawal flow are handled by chatearn-app.js. */

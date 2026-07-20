@@ -1,1 +1,0 @@
-/* Admin panel disabled. Sponsored ads are edited in chatearn-v4-2.js. */
