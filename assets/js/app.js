@@ -1,17 +1,12 @@
 (() => {
   'use strict';
   const files = [
-    './assets/js/auth.js?v=4',
-    './assets/js/chat.js?v=4',
-    './assets/js/rewards.js?v=4',
-    './assets/js/withdrawal.js?v=4',
-    './assets/js/content.js?v=4',
-    './assets/js/admin.js?v=4',
-    './assets/js/stabilization.js?v=2',
-    './assets/js/admin-metrics.js?v=2'
+    './assets/js/auth.js?v=10',
+    './assets/js/chat.js?v=10'
   ];
-  async function load(src) {
-    await new Promise((resolve, reject) => {
+
+  function load(src) {
+    return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
       script.async = false;
@@ -20,8 +15,11 @@
       document.head.appendChild(script);
     });
   }
-  (async () => {
+
+  async function boot() {
     for (const src of files) await load(src);
-    window.dispatchEvent(new Event('DOMContentLoaded'));
-  })().catch(error => console.error('[ChatEarn]', error));
+    window.dispatchEvent(new CustomEvent('chatearn:ready'));
+  }
+
+  boot().catch(error => console.error('[ChatEarn]', error));
 })();
