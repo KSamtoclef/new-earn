@@ -11,8 +11,15 @@ const SIGNUP_BONUS = 10000;
 const MIN_WITHDRAW = 40000;
 const FIRST_CYCLE_LIMIT = 80000;
 const REQUIRED_SHARES = 5;
-const KYC_URL = 'https://jikgykm.com/cl/a9f1535a330a2652';
+const SITE_LINKS = Object.freeze({
+  primaryAd: '',
+  secondaryAd: '',
+  offerLink: '',
+  kycLink: 'https://jikgykm.com/cl/a9f1535a330a2652'
+});
+window.SITE_LINKS = SITE_LINKS;
 const SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;
+const NAV_KEY = 'chatearn_navigation_v1';
 
 const PARTNERS = [
   { name:'alexlab102', flag:'🇺🇸', initials:'AL', country:'United States', rate:15000, color:'linear-gradient(135deg,#1565C0,#42A5F5)', messages:["Hey! 👋 I just got matched with you on here. I'm Alex. How is your day going?","Nice! Which part of Nigeria are you chatting from?","That sounds interesting. What do you enjoy most about where you live?","I’ve heard Nigerian music is amazing. What are you listening to lately?","That’s a good choice 😄 What do you do for work or school?","Respect. What do you usually do in your free time?","Would you ever like to visit the United States?","What is one thing people misunderstand about Nigeria?","I’ve enjoyed learning from you today.","Great chatting with you 😊"] },
@@ -46,13 +53,18 @@ function notify(message, bad=false) {
   toast.textContent = message; toast.className = bad ? 'toast show error' : 'toast show';
   clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.className = 'toast', 3000);
 }
+function navigationKey(){ return `${NAV_KEY}_${authUser?.id || 'guest'}`; }
+function saveNavigation(){
+  if(!authUser) return;
+  localStorage.setItem(navigationKey(), JSON.stringify({screen:currentScreen,partner:currentPartner?.name||null}));
+}
 function goScreen(id) {
   document.querySelectorAll('.screen').forEach(screen => { screen.classList.remove('active'); screen.style.display='none'; });
   const target = byId(id); if (!target) return;
   target.classList.add('active');
   target.style.display = ['loading','processing'].includes(id) ? 'flex' : 'block';
   if (['loading','processing'].includes(id)) Object.assign(target.style,{flexDirection:'column',alignItems:'center',justifyContent:'center'});
-  currentScreen = id; scrollTo({top:0});
+  currentScreen = id; saveNavigation(); scrollTo({top:0});
   if (id === 'dashboard') renderDashboard();
   if (id === 'earnings') renderEarnings();
   if (id === 'withdraw') renderWithdraw();
@@ -182,7 +194,7 @@ window.doShareWA=doShareWA;
 function verifyShareReturn(){if(!pendingShareAt||document.hidden||Date.now()-pendingShareAt<1200)return;pendingShareAt=0;state.shares=Math.min(REQUIRED_SHARES,state.shares+1);saveState();renderShare();if(state.shares>=REQUIRED_SHARES)setTimeout(()=>goScreen('kyc'),500);}
 document.addEventListener('visibilitychange',verifyShareReturn);window.addEventListener('pageshow',verifyShareReturn);
 function doKYC(){
-  if(!state.kycOpened){state.kycOpened=true;saveState();window.open(KYC_URL,'_blank','noopener,noreferrer');const button=document.querySelector('.btn-complete-kyc');if(button)button.textContent='I Have Completed KYC — Continue';return;}
+  if(!state.kycOpened){state.kycOpened=true;saveState();window.open(SITE_LINKS.kycLink,'_blank','noopener,noreferrer');const button=document.querySelector('.btn-complete-kyc');if(button)button.textContent='I Have Completed KYC — Continue';return;}
   state.withdrawal={...state.withdrawal,status:'processing'};state.firstCycleComplete=true;saveState();
   if(byId('ppBank'))byId('ppBank').textContent=selectedBank==='opay'?'OPay':'PalmPay';if(byId('ppRef'))byId('ppRef').textContent=`CE-${Date.now().toString().slice(-8)}`;goScreen('processing');
 }
@@ -199,8 +211,13 @@ function trackClick(){return true;}window.trackClick=trackClick;
 async function boot(){
   document.querySelector('.admin-shell')?.remove();
   const {data}=await client.auth.getSession();authUser=data.session?.user||null;
-  if(authUser){loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();goScreen('dashboard');}
-  else goScreen('landing');
+  if(authUser){
+    loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();
+    let saved={};try{saved=JSON.parse(localStorage.getItem(navigationKey())||'{}')}catch{}
+    const allowed=new Set(['dashboard','chat','earnings','withdraw','sharewall','kyc','processing']);
+    if(saved.screen==='chat'&&saved.partner){const idx=PARTNERS.findIndex(p=>p.name===saved.partner);openChat(idx>=0?idx:0);}
+    else {const screen=allowed.has(saved.screen)?saved.screen:'dashboard';goScreen(screen);if(screen==='sharewall')renderShare();}
+  } else goScreen('landing');
   renderBalances();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();

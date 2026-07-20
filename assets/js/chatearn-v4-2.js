@@ -12,12 +12,11 @@
    type        = native | inpush | overlay
    returningOnly = true means it appears only after first withdrawal processing
 */
+const links=window.SITE_LINKS||{};
 const ADS = [
-  { id:'bonus', title:"Claim Today's Bonus Offer", description:'Exclusive reward for active users', cta:'Claim →', url:'https://example.com/bonus', icon:'🎁', theme:'green', placement:'both', mode:'fixed', type:'native', returningOnly:false },
-  { id:'boost', title:'Boost Your Earnings Today', description:'Open this sponsored opportunity to continue', cta:'Open →', url:'https://example.com/boost', icon:'💳', theme:'blue', placement:'chat', mode:'random', type:'native', returningOnly:false },
-  { id:'report', title:'View Earnings Report', description:'See useful earning information', cta:'View →', url:'https://example.com/report', icon:'📊', theme:'purple', placement:'dashboard', mode:'fixed', type:'native', returningOnly:false },
-  { id:'special', title:'Special Sponsored Opportunity', description:'A limited offer selected for active members', cta:'Check Now →', url:'https://example.com/special', icon:'⭐', theme:'orange', placement:'chat', mode:'random', type:'inpush', returningOnly:true },
-  { id:'gold', title:'Recommended Sponsored Task', description:'Another opportunity for active chat users', cta:'View Offer →', url:'https://example.com/task', icon:'🔥', theme:'gold', placement:'chat', mode:'random', type:'overlay', returningOnly:true }
+  { id:'bonus', title:"Claim Today's Bonus Offer", description:'Exclusive reward for active users', cta:'Claim →', url:links.primaryAd||'', icon:'🎁', theme:'green', placement:'both', mode:'fixed', type:'native', returningOnly:false },
+  { id:'boost', title:'Boost Your Earnings Today', description:'Open this sponsored opportunity to continue', cta:'Open →', url:links.secondaryAd||'', icon:'💳', theme:'blue', placement:'chat', mode:'random', type:'native', returningOnly:false },
+  { id:'report', title:'View Earnings Report', description:'See useful earning information', cta:'View →', url:links.offerLink||'', icon:'📊', theme:'purple', placement:'dashboard', mode:'fixed', type:'native', returningOnly:false }
 ];
 
 const THEMES = {
@@ -47,10 +46,10 @@ function chooseRandom(placement){
   const list=eligible(placement,'random');if(!list.length)return null;
   const ad=list[randomCursor%list.length];randomCursor+=1;return ad;
 }
-function safeUrl(url){try{const parsed=new URL(url,location.origin);return ['http:','https:'].includes(parsed.protocol)?parsed.href:'#';}catch{return '#';}}
+function safeUrl(url){if(!url)return '';try{const parsed=new URL(url,location.origin);return ['http:','https:'].includes(parsed.protocol)?parsed.href:'';}catch{return '';}}
 function content(ad,compact=false){
   const t=THEMES[ad.theme]||THEMES.green;
-  const root=document.createElement('a');root.href=safeUrl(ad.url);root.target='_blank';root.rel='noopener noreferrer sponsored';root.dataset.sponsoredId=ad.id;
+  const root=document.createElement('a');const destination=safeUrl(ad.url);root.href=destination||'#';if(!destination){root.addEventListener('click',event=>event.preventDefault());root.setAttribute('aria-disabled','true');}root.target='_blank';root.rel='noopener noreferrer sponsored';root.dataset.sponsoredId=ad.id;
   root.style.cssText=`display:flex;align-items:center;gap:11px;text-decoration:none;color:#fff;background:${t.bg};border:1px solid ${t.border};border-radius:14px;padding:${compact?'12px':'14px 16px'};box-shadow:0 10px 28px rgba(0,0,0,.22)`;
   const icon=document.createElement('span');icon.textContent=ad.icon||'📢';icon.style.fontSize=compact?'22px':'25px';
   const body=document.createElement('span');body.style.cssText='flex:1;min-width:0';
@@ -94,20 +93,7 @@ function afterReply(count,body){
   showAd(ad,body);
   nextChatAdAt=count+(isReturning()?3+Math.floor(Math.random()*2):4);
 }
-function showLoginModal(){const modal=document.getElementById('loginModal');if(!modal)return;modal.classList.add('show');modal.style.display='flex';setTimeout(()=>document.getElementById('loginEmail')?.focus(),50);}
-function hideLoginModal(){const modal=document.getElementById('loginModal');if(!modal)return;modal.classList.remove('show');modal.style.display='none';}
-function showLoginError(message){const box=document.getElementById('loginError');if(!box)return;box.textContent=message;box.classList.add('show');}
-function bindAuthButtons(){
-  document.addEventListener('click',event=>{
-    const registerButton=event.target.closest('#regSubmitBtn');
-    if(registerButton){event.preventDefault();event.stopImmediatePropagation();if(typeof window.doRegister==='function')window.doRegister();else alert('Registration is still loading. Refresh the page and try again.');return;}
-    const loginButton=event.target.closest('#loginBtn');
-    if(loginButton){event.preventDefault();event.stopImmediatePropagation();const email=document.getElementById('loginEmail')?.value.trim();const password=document.getElementById('loginPass')?.value||'';if(!email||!password){showLoginError('Enter your email and password.');return;}document.getElementById('loginError')?.classList.remove('show');if(typeof window.doLogin==='function')window.doLogin();else showLoginError('Login is still loading. Refresh the page and try again.');return;}
-    if(event.target.closest('.reg-login span')){event.preventDefault();event.stopImmediatePropagation();showLoginModal();return;}
-    if(event.target.closest('.login-close')){event.preventDefault();event.stopImmediatePropagation();hideLoginModal();}
-  },true);
-}
-function boot(){mountDashboard();bindAuthButtons();new MutationObserver(mountDashboard).observe(document.body,{childList:true,subtree:true});}
-window.ChatEarnAds=Object.freeze({ADS,afterReply});window.openLogin=showLoginModal;window.closeLogin=hideLoginModal;
+function boot(){mountDashboard();new MutationObserver(mountDashboard).observe(document.body,{childList:true,subtree:true});}
+window.ChatEarnAds=Object.freeze({ADS,afterReply});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
