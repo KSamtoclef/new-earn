@@ -3,80 +3,115 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <meta name="theme-color" content="#08110c">
+  <meta name="theme-color" content="#07110d">
   <title>ChatEarn</title>
-  <link rel="stylesheet" href="./assets/css/app.css?v=1">
+  <link rel="stylesheet" href="./assets/css/app.css?v=10">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="./assets/js/config.js?v=2" defer></script>
-  <script src="./assets/js/app.js?v=2" defer></script>
+  <script src="./assets/js/config.js?v=10" defer></script>
+  <script src="./assets/js/app.js?v=10" defer></script>
 </head>
 <body>
   <main class="shell">
-    <section id="landing" class="screen active">
-      <div class="brand">Chat<span>Earn</span></div>
-      <div class="hero-card">
-        <div class="badge">CHAT • CONNECT • EARN</div>
-        <h1>Chat with people worldwide and earn rewards.</h1>
-        <p>Create your account, start a guided conversation and track your earnings from one simple dashboard.</p>
-        <button data-open="register" class="primary">Create account</button>
-        <button data-open="login" class="secondary">Log in</button>
+    <section id="landing" class="screen active landing-screen">
+      <header class="topbar">
+        <div class="brand"><span class="brand-icon">●</span>Chat<span>Earn</span></div>
+        <div class="live-dot"><i></i> LIVE</div>
+      </header>
+
+      <div class="country-row" aria-label="Available chat regions">
+        <span>US</span><span>GB</span><span>CA</span><span>DE</span><span>AU</span><b>+2K</b>
       </div>
+
+      <div class="hero-copy">
+        <h1>Chat With <em>Foreigners</em><br>&amp; Earn in Naira</h1>
+        <p>Nigerians are earning <strong>₦30,000–₦50,000 daily</strong> by joining conversations and completing rewarded replies.</p>
+      </div>
+
+      <button data-open="register" class="primary hero-cta">🚀 Start Earning Now — Free</button>
+      <div class="trust-row"><span>☑ Free to join</span><span>💰 Rewarded replies</span><span>🔒 Secure</span></div>
+
+      <section class="rate-card">
+        <small>EARNINGS PER REPLY</small>
+        <div><span>US&nbsp;&nbsp; American English</span><b>₦15,000/reply</b></div>
+        <div><span>GB&nbsp;&nbsp; British English</span><b>₦12,000/reply</b></div>
+        <div><span>CA&nbsp;&nbsp; Canadian English</span><b>₦10,000/reply</b></div>
+      </section>
+
+      <button data-open="login" class="text-link">Already registered? Log in</button>
     </section>
 
-    <section id="register" class="screen">
+    <section id="register" class="screen auth-screen">
       <button class="back" data-open="landing">← Back</button>
       <div class="panel">
-        <h2>Create your account</h2>
-        <p>Enter your details to continue.</p>
+        <div class="brand compact"><span class="brand-icon">●</span>Chat<span>Earn</span></div>
+        <h2>Create your free account</h2>
+        <p>Register once and start chatting immediately.</p>
         <form id="registerForm">
           <label>Full name<input id="regName" autocomplete="name" required></label>
-          <label>Email<input id="regEmail" type="email" autocomplete="email" required></label>
+          <label>Email address<input id="regEmail" type="email" autocomplete="email" required></label>
           <label>Password<input id="regPassword" type="password" minlength="6" autocomplete="new-password" required></label>
           <button id="registerButton" class="primary" type="submit">Create account</button>
         </form>
+        <button data-open="login" class="text-link">Already have an account? Log in</button>
       </div>
     </section>
 
-    <section id="login" class="screen">
+    <section id="login" class="screen auth-screen">
       <button class="back" data-open="landing">← Back</button>
       <div class="panel">
+        <div class="brand compact"><span class="brand-icon">●</span>Chat<span>Earn</span></div>
         <h2>Welcome back</h2>
-        <p>Log in to continue from your saved account.</p>
+        <p>Log in and continue from where you stopped.</p>
         <form id="loginForm">
-          <label>Email<input id="loginEmail" type="email" autocomplete="email" required></label>
+          <label>Email address<input id="loginEmail" type="email" autocomplete="email" required></label>
           <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
           <button id="loginButton" class="primary" type="submit">Log in</button>
         </form>
+        <button data-open="register" class="text-link">Create a new account</button>
       </div>
     </section>
 
-    <section id="loading" class="screen loading-screen">
-      <div class="spinner"></div>
-      <h2>Loading your account</h2>
-      <p id="loadingText">Connecting securely…</p>
-    </section>
-
-    <section id="dashboard" class="screen">
+    <section id="dashboard" class="screen dashboard-screen">
       <header class="dashboard-head">
         <div><small>WELCOME BACK</small><h2 id="userName">User</h2></div>
         <button id="logoutButton" class="ghost">Log out</button>
       </header>
+
       <div class="balance-card">
-        <span>Available balance</span>
+        <span>Available earnings</span>
         <strong id="balance">₦0</strong>
-        <small>Loaded directly from your account.</small>
+        <small>Your current frontend session balance.</small>
       </div>
+
       <div class="stats">
-        <div><span>Chats</span><strong id="chatCount">0</strong></div>
-        <div><span>Account</span><strong id="accountStatus">Active</strong></div>
+        <div><span>Replies</span><strong id="chatCount">0</strong></div>
+        <div><span>Status</span><strong>Active</strong></div>
       </div>
-      <div class="empty-state">
-        <div>💬</div>
-        <h3>Choose a chat partner</h3>
-        <p>Your clean ChatEarn experience is ready.</p>
-      </div>
+
+      <section class="partner-section">
+        <div class="section-heading"><div><small>AVAILABLE NOW</small><h3>Choose a chat partner</h3></div><span class="online-count">6 online</span></div>
+        <div id="partnerList" class="partner-list"></div>
+      </section>
+
+      <section id="fixedAdSlot" class="ad-slot" aria-label="Sponsored content"></section>
+    </section>
+
+    <section id="chat" class="screen chat-screen">
+      <header class="chat-head">
+        <button id="chatBack" class="back">←</button>
+        <span class="avatar" id="chatAvatar">🌍</span>
+        <div><strong id="chatName">Partner</strong><small id="chatStatus">Online now</small></div>
+        <span class="chat-rate" id="chatRate">₦0/reply</span>
+      </header>
+      <div id="messages" class="messages"></div>
+      <div id="randomAdSlot" class="ad-slot inline-ad" aria-label="Sponsored content"></div>
+      <form id="composer" class="composer">
+        <input id="chatInput" maxlength="500" placeholder="Type your reply…" autocomplete="off" required>
+        <button class="send" type="submit">➤</button>
+      </form>
     </section>
   </main>
+
   <div id="toast" role="status"></div>
 </body>
 </html>
