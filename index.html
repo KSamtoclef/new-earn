@@ -7,14 +7,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 <meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="./assets/css/chatearn.css?v=4.0.0">
-<link rel="stylesheet" href="./assets/css/chatearn-v6-admin.css?v=6.1.0">
-<script src="./assets/js/clarity.js?v=4.0.0" defer></script>
+<link rel="stylesheet" href="./assets/css/chatearn.css?v=7.0.0">
 
 
-<link rel="stylesheet" href="./assets/css/chatearn-v3.css?v=4.0.0">
-<link rel="stylesheet" href="./assets/css/chatearn-v4-returning.css?v=4.1.0">
-  <link rel="stylesheet" href="./assets/css/chatearn-v4-2.css?v=4.2.0">
+
+
+
+
+  
  
 </head>
 <body>
@@ -575,26 +575,8 @@
 
 </div><!-- page-wrap -->
 
-<script src="./assets/js/chatearn-app.js?v=6.0.0" defer></script>
-<div class="admin-shell" id="adminShell">
-  <div class="admin-wrap">
-    <div class="admin-head">
-      <div><div class="admin-brand">Chat<span>Earn</span> Admin <small style="font-size:9px;color:#607067;vertical-align:middle;">v6.0</small></div><div class="admin-status-line"><span class="admin-live-dot connecting" id="adminRealtimeDot"></span><span id="adminRealtimeText">Checking connection…</span></div><div class="admin-last-updated" id="adminLastUpdated">Not refreshed yet</div><div class="admin-last-updated" id="adminAutoRefreshText">Auto-refresh every 10s</div></div>
-      <div class="admin-head-actions"><button type="button" class="admin-btn" id="adminRefreshBtn" onclick="refreshAdmin()">Refresh</button><button type="button" class="admin-btn" onclick="adminLogout()">Log out</button><button type="button" class="admin-btn" onclick="closeAdmin()">Close</button></div>
-    </div>
-    <div class="admin-error" id="adminError"></div>
-    <div class="admin-login" id="adminLoginBox">
-      <div style="font-size:21px;font-weight:900;margin-bottom:5px;">Administrator Login</div>
-      <div style="font-size:12px;color:#89968d;margin-bottom:16px;">Use your Supabase administrator account. There is no password-reset screen.</div>
-      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="adminEmail" type="email"></div>
-      <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="adminPass" type="password"></div>
-      <button type="button" class="admin-btn primary" id="adminLoginBtn" style="width:100%;padding:13px;" onclick="adminLogin()">Open Admin Panel</button>
-    </div>
-    <div id="adminContent" style="display:none;">
-      <div class="admin-tabs" id="adminTabs">
-        <button type="button" class="admin-tab active" data-tab="overview" onclick="return adminSwitchTab(event,'overview',this)">Overview</button><button type="button" class="admin-tab" data-tab="live" onclick="return adminSwitchTab(event,'live',this)">Live</button><button type="button" class="admin-tab" data-tab="funnel" onclick="return adminSwitchTab(event,'funnel',this)">Funnel</button><button type="button" class="admin-tab" data-tab="pages" onclick="return adminSwitchTab(event,'pages',this)">Pages</button><button type="button" class="admin-tab" data-tab="chats" onclick="return adminSwitchTab(event,'chats',this)">Chats</button><button type="button" class="admin-tab" data-tab="shares" onclick="return adminSwitchTab(event,'shares',this)">Shares</button><button type="button" class="admin-tab" data-tab="push" onclick="return adminSwitchTab(event,'push',this)">Push</button><button type="button" class="admin-tab" data-tab="activity" onclick="return adminSwitchTab(event,'activity',this)">Activity & Errors</button><button type="button" class="admin-tab" data-tab="withdrawals" onclick="return adminSwitchTab(event,'withdrawals',this)">Withdrawals</button><button type="button" class="admin-tab" data-tab="kyc" onclick="return adminSwitchTab(event,'kyc',this)">KYC</button><button type="button" class="admin-tab" data-tab="users" onclick="return adminSwitchTab(event,'users',this)">Users</button><button type="button" class="admin-tab" data-tab="insights" onclick="return adminSwitchTab(event,'insights',this)">AI Insights</button>
-      </div>
-      <div class="admin-panel active" id="admin-overview"><div class="admin-status-banner"><b>Traffic counting:</b> unique browsers do not increase when the same person refreshes. Sessions, site entries and page views are shown separately.</div><div class="admin-grid" id="overviewKpis"></div><div class="admin-two"><div><div class="admin-section-title">Latest meaningful activity</div><div class="admin-list" id="overviewActivity"></div></div><div><div class="admin-section-title">Immediate attention</div><div class="admin-list" id="overviewAttention"></div></div></div></div>
+<script src="./assets/js/chatearn-app.js?v=7.0.0" defer></script>
+</div>
       <div class="admin-panel" id="admin-live"><div class="admin-grid" id="liveKpis"></div><div class="admin-section-title">Visitors online now</div><div class="admin-list" id="liveList"></div></div>
       <div class="admin-panel" id="admin-funnel"><div class="admin-status-banner">Conversion funnel for the last seven days. Each stage counts unique users or browsers.</div><div class="admin-section-title">Full user journey</div><div class="admin-list" id="funnelList"></div></div>
       <div class="admin-panel" id="admin-pages"><div class="admin-status-banner">Page performance for the last seven days.</div><div class="admin-grid" id="pageKpis"></div><div class="admin-section-title">Page performance</div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Page</th><th>Views</th><th>Unique sessions</th><th>Average time</th><th>Exits</th></tr></thead><tbody id="pagesTable"></tbody></table></div></div>
@@ -609,21 +591,7 @@
     </div>
   </div>
 </div>
-
-
-<script src="./assets/js/chatearn-v3.js?v=4.2.0" defer></script>
-<script src="./assets/js/chatearn-v4-returning.js?v=4.1.0" defer></script>
-<script src="./assets/js/chatearn-v4-2.js?v=4.2.0" defer></script>
-<script src="./assets/js/chatearn-auth-session-fix.js?v=8.0.4" defer></script>
-<script src="./assets/js/chatearn-chat-runtime-integrity.js?v=8.6.0" defer></script>
-<script src="./assets/js/chatearn-module7-admin.js?v=8.1.0" defer></script>
-<script src="./assets/js/chatearn-v6-admin.js?v=6.1.5" defer></script>
-
-  <!-- start webpushr tracking code --> 
-<script>(function(w,d, s, id) {if(typeof(w.webpushr)!=='undefined') return;w.webpushr=w.webpushr||function(){(w.webpushr.q=w.webpushr.q||[]).push(arguments)};var js, fjs = d.getElementsByTagName(s)[0];js = d.createElement(s); js.id = id;js.async=1;js.src = "https://cdn.webpushr.com/app.min.js";
-fjs.parentNode.appendChild(js);}(window,document, 'script', 'webpushr-jssdk'));
-webpushr('setup',{'key':'BH_DnurzuaZJGB9IXocgQlXTmXzwZk4Ub7t649HoFloUdkF3kIv-xCmFbQme1HKDs-u31hazP2tJF7lnopTzP98' });</script>
-<!-- end webpushr tracking code -->
-
+<script src="./assets/js/chatearn-v4-2.js?v=7.0.0" defer></script>
+<script src="./assets/js/chatearn-auth-session-fix.js?v=9.0.0" defer></script>
 </body>
 </html>
