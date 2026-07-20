@@ -25,6 +25,10 @@
     document.getElementById('offerForm')?.addEventListener('submit', saveOffer);
     document.getElementById('taskForm')?.addEventListener('submit', saveTask);
     document.querySelectorAll('[data-load-queue]').forEach(b=>b.addEventListener('click',()=>loadQueue(b.dataset.loadQueue)));
+    document.getElementById('admin')?.addEventListener('click', event => {
+      const button = event.target.closest('[data-review-id]');
+      if (button) review(button.dataset.reviewKind, button.dataset.reviewId, button.dataset.reviewStatus);
+    });
   }
 
   async function checkAdmin() {
@@ -71,9 +75,17 @@
     toast('Task saved.');
   }
 
+  async function review(kind, id, status) {
+    const { error } = await client.rpc('chatearn_v6_admin_bulk_review_impl', { p_kind:kind, p_ids:[id], p_status:status, p_note:null });
+    if (error) return toast(error.message,true);
+    toast(`${kind==='kyc'?'KYC':'Withdrawal'} ${status}.`);
+    loadQueue(kind);
+  }
+
   function row(item, kind) {
     const title = kind==='withdrawals' ? `${esc(item.full_name||'User')} · ₦${Number(item.amount||0).toLocaleString('en-NG')}` : esc(item.full_name||'User');
-    return `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><b>${title}</b><div style="color:var(--muted);font-size:12px;margin-top:4px">${esc(item.status||'pending')} · ${esc(item.reference||item.id||'')}</div></div>`;
+    const id = esc(item.id||'');
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><b>${title}</b><div style="color:var(--muted);font-size:12px;margin-top:4px">${esc(item.status||'pending')} · ${esc(item.reference||item.id||'')}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="secondary" data-review-kind="${kind}" data-review-id="${id}" data-review-status="approved">Approve</button><button class="secondary" data-review-kind="${kind}" data-review-id="${id}" data-review-status="rejected">Reject</button></div></div>`;
   }
 
   async function loadQueue(kind) {
