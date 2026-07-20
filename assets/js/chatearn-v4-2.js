@@ -52,7 +52,64 @@ function afterReply(count,body){
   const ad=chooseRandom('chat')||eligible('chat','fixed')[count%Math.max(1,eligible('chat','fixed').length)];if(!ad)return;
   const wrapper=document.createElement('div');wrapper.className='msg-row';wrapper.dataset.codeAd=ad.id;wrapper.appendChild(card(ad,true));body.appendChild(wrapper);body.scrollTop=body.scrollHeight;
 }
-function boot(){mountDashboard();new MutationObserver(mountDashboard).observe(document.body,{childList:true,subtree:true});}
+
+function showLoginModal(){
+  const modal=document.getElementById('loginModal');
+  if(!modal)return;
+  modal.classList.add('show');
+  modal.style.display='flex';
+  setTimeout(()=>document.getElementById('loginEmail')?.focus(),50);
+}
+function hideLoginModal(){
+  const modal=document.getElementById('loginModal');
+  if(!modal)return;
+  modal.classList.remove('show');
+  modal.style.display='none';
+}
+function showLoginError(message){
+  const box=document.getElementById('loginError');
+  if(!box)return;
+  box.textContent=message;
+  box.classList.add('show');
+}
+function bindAuthButtons(){
+  document.addEventListener('click',event=>{
+    const registerButton=event.target.closest('#regSubmitBtn');
+    if(registerButton){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if(typeof window.doRegister==='function')window.doRegister();
+      else alert('Registration is still loading. Refresh the page and try again.');
+      return;
+    }
+    const loginButton=event.target.closest('#loginBtn');
+    if(loginButton){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const email=document.getElementById('loginEmail')?.value.trim();
+      const password=document.getElementById('loginPass')?.value||'';
+      if(!email||!password){showLoginError('Enter your email and password.');return;}
+      document.getElementById('loginError')?.classList.remove('show');
+      if(typeof window.doLogin==='function')window.doLogin();
+      else showLoginError('Login is still loading. Refresh the page and try again.');
+      return;
+    }
+    if(event.target.closest('.reg-login span')){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      showLoginModal();
+      return;
+    }
+    if(event.target.closest('.login-close')){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      hideLoginModal();
+    }
+  },true);
+}
+function boot(){mountDashboard();bindAuthButtons();new MutationObserver(mountDashboard).observe(document.body,{childList:true,subtree:true});}
 window.ChatEarnAds=Object.freeze({ADS,afterReply});
+window.openLogin=showLoginModal;
+window.closeLogin=hideLoginModal;
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
