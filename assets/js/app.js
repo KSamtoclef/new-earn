@@ -5,7 +5,8 @@
     './assets/js/chat.js?v=1',
     './assets/js/rewards.js?v=1',
     './assets/js/withdrawal.js?v=1',
-    './assets/js/content.js?v=1'
+    './assets/js/content.js?v=1',
+    './assets/js/admin.js?v=1'
   ];
   async function load(src) {
     await new Promise((resolve, reject) => {
