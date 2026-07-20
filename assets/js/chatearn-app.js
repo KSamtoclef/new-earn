@@ -1,467 +1,207 @@
-const SUPABASE_URL="https://dtjxcgzpwemdgdeinkcl.supabase.co";
-const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0anhjZ3pwd2VtZGdkZWlua2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDg0ODQsImV4cCI6MjA5MzQ4NDQ4NH0.kGjtOZfK7onzr-3FVMuSljiJ3emllxtGdepxrFVUPPM";
-const supabaseClient=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-const SITE="https://chat-earn.xyz",AFF="https://jikgykm.com/cl/a9f1535a330a2652",BACK="https://omg10.com/4/4105256",REQ=5;
-const MIN_WITHDRAW=40000,MAX_EARN=80000,SIGNUP_BONUS=10000;
-const SESSION_ID=sessionStorage.getItem('ce_session_id')||crypto.randomUUID(); sessionStorage.setItem('ce_session_id',SESSION_ID);
-const VISITOR_ID=localStorage.getItem('ce_visitor_id')||crypto.randomUUID(); localStorage.setItem('ce_visitor_id',VISITOR_ID);
-let currentUser=null,currentProfile=null,userName="",totalBalance=SIGNUP_BONUS,chatEarnings=0,replyCount=0,currentChatUser=null,currentScreen="landing";
-let swShares=0,selectedBank="opay",chatBusy=false,withdrawPrompted=false,withdrawalAmount=0,withdrawalBank="opay",withdrawalAcc="",shareFailTriggered=false;
-let checkinStreak=0,lastCheckinDate="",screenEnteredAt=Date.now(),adminData={events:[],profiles:[],presence:[],withdrawals:[],kyc:[],threads:[],ledger:[]},adminChannels=[],adminRefreshTimer=null,adminRefreshing=false,adminRefreshQueued=false,adminActivityFilter='important',adminPreviousScreen='landing',adminPollHandle=null,adminTickerHandle=null,adminNextPollAt=0,adminRealtimeReady=false,adminLastRealtimeAt=0,adminHasLoaded=false;
-const ADMIN_POLL_MS=60000;
-let pendingMessageQueue=[];
-let lastPartnerMessage='',currentPartnerTurn=0,presenceInFlight=false,presenceLastSuccessAt=0,presenceLastErrorAt=0;
-let presenceScheduleTimer=null,profileLoadPromise=null,profileLoadedAt=0,threadsLoadPromise=null,threadsLoadedAt=0,threadsCache=[];
-const PROFILE_CACHE_MS=15000,THREAD_CACHE_MS=12000;
-const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const deferWork=(fn,delay=0)=>{const run=()=>{try{fn()}catch(e){console.debug('deferred work',e?.message||e)}};if(delay)return setTimeout(run,delay);if('requestIdleCallback'in window)return requestIdleCallback(run,{timeout:1200});return setTimeout(run,0)};
-function schedulePresence(delay=500,visibleOverride){clearTimeout(presenceScheduleTimer);presenceScheduleTimer=setTimeout(()=>updatePresence(visibleOverride),delay)}
+(() => {
+'use strict';
 
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-const money=n=>'₦'+Number(n||0).toLocaleString('en-NG');
-const ago=ts=>{if(!ts)return'—';const s=Math.max(0,Math.floor((Date.now()-new Date(ts).getTime())/1000));if(s<10)return'just now';if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'};
-const deviceInfo=()=>{const ua=navigator.userAgent;return{device:/Mobile|Android|iPhone|iPad/i.test(ua)?'mobile':'desktop',browser:/Edg/i.test(ua)?'Edge':/OPR|Opera/i.test(ua)?'Opera':/Chrome/i.test(ua)?'Chrome':/Safari/i.test(ua)?'Safari':/Firefox/i.test(ua)?'Firefox':'Other'}};
+const SUPABASE_URL = 'https://cqnovqvmxwmfngupgtov.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxbm92cXZteHdtZm5ndXBndG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODA0NzQsImV4cCI6MjA5OTg1NjQ3NH0.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs';
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'chatearn-auth-v2' }
+});
 
-async function trackEvent(eventName,metadata={}){try{await supabaseClient.rpc('chatearn_track_event',{p_event_name:eventName,p_session_id:SESSION_ID,p_visitor_id:VISITOR_ID,p_page:currentScreen,p_partner:currentChatUser?.name||null,p_metadata:metadata});}catch(e){console.debug('event',e.message)}}
-async function updatePresence(visibleOverride){
-  if(presenceInFlight)return;
-  presenceInFlight=true;
-  try{
-    const d=deviceInfo(),visible=typeof visibleOverride==='boolean'?visibleOverride:document.visibilityState!=='hidden';
-    const {error}=await supabaseClient.rpc('chatearn_v3_presence_ping',{p_session_id:SESSION_ID,p_visitor_id:VISITOR_ID,p_page:currentScreen,p_device:d.device,p_browser:d.browser,p_source:document.referrer||new URLSearchParams(location.search).get('ref')||'direct',p_visible:visible});
-    if(error)throw error;
-    presenceLastSuccessAt=Date.now();
-  }catch(e){
-    console.warn('Presence heartbeat failed:',e?.message||e);
-    if(Date.now()-presenceLastErrorAt>300000){presenceLastErrorAt=Date.now();trackEvent('presence_heartbeat_failed',{message:e?.message||String(e)});}
-  }finally{presenceInFlight=false}
-}
-setInterval(()=>{if(!document.hidden)updatePresence(true)},15000);
-document.addEventListener('visibilitychange',()=>{schedulePresence(document.hidden?0:350,document.visibilityState!=='hidden');if(!document.hidden)flushPendingMessages()});
-window.addEventListener('focus',()=>schedulePresence(350,true));
-window.addEventListener('pageshow',()=>schedulePresence(450,document.visibilityState!=='hidden'));
-window.addEventListener('pagehide',()=>updatePresence(false));
-window.addEventListener('online',()=>{document.getElementById('offlineStrip')?.classList.remove('show');flushPendingMessages();schedulePresence(300,true)});
-window.addEventListener('offline',()=>document.getElementById('offlineStrip')?.classList.add('show'));
-supabaseClient.auth.onAuthStateChange(()=>schedulePresence(1200,document.visibilityState!=='hidden'));
-function startPresenceHeartbeat(){schedulePresence(1200,document.visibilityState!=='hidden')}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startPresenceHeartbeat,{once:true});else startPresenceHeartbeat();
-window.addEventListener('error',e=>trackEvent('js_error',{message:e.message,source:e.filename,line:e.lineno}));window.addEventListener('unhandledrejection',e=>trackEvent('js_error',{message:String(e.reason?.message||e.reason||'promise rejection')}));
+const SIGNUP_BONUS = 10000;
+const MIN_WITHDRAW = 40000;
+const FIRST_CYCLE_LIMIT = 80000;
+const REQUIRED_SHARES = 5;
+const KYC_URL = 'https://jikgykm.com/cl/a9f1535a330a2652';
+const SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;
 
-function goScreen(id){const previous=currentScreen;if(previous&&previous!==id)trackEvent('page_exit',{page:previous,duration_seconds:Math.round((Date.now()-screenEnteredAt)/1000),next_page:id});document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.style.display='none'});const target=document.getElementById(id);if(!target)return;target.classList.add('active');if(['loading','processing'].includes(id)){Object.assign(target.style,{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'})}else target.style.display='block';currentScreen=id;screenEnteredAt=Date.now();window.scrollTo({top:0,behavior:'smooth'});trackEvent('page_view',{page:id});schedulePresence(450);if(id==='dashboard')void renderConversationCards();if(id==='earnings')trackEvent('earnings_opened');if(id==='withdraw')trackEvent('withdrawal_opened');if(id==='sharewall')trackEvent('share_page_reached');if(id==='kyc')trackEvent('kyc_opened');}
-
-(function(){history.pushState(null,'',location.href);history.pushState(null,'',location.href);window.addEventListener('popstate',function(){history.pushState(null,'',location.href);if(currentScreen==='landing'||currentScreen==='register'){window.location.href=BACK}else showBackWarn()})})();
-document.addEventListener('contextmenu',e=>e.preventDefault());
-function showBackWarn(){document.getElementById('bwAmount').textContent=money(totalBalance);document.getElementById('backWarn').classList.add('show')}function closeBackWarn(){document.getElementById('backWarn').classList.remove('show')}
-
-const FOREIGNERS=[
-{name:'alexlab102',flag:'🇺🇸',initials:'AL',color:'linear-gradient(135deg,#1565C0,#42A5F5)',country:'United States',rate:15000,msgs:["Hey! 👋 I just got matched with you on here. I'm Alex, from Houston Texas. What's up?","Oh nice nice! I've been wanting to chat with someone from Nigeria for a while now 😄 Which part are you from?","Bro Lagos?? I've watched so many videos about Lagos on YouTube lol. The energy there looks CRAZY 🔥 Is it really like that?","Haha I knew it! My friend went to Lagos last year and said it changed his life fr 😂 Do you go out a lot or more stay home?","That's wild man. In Houston it's more chill... drive everywhere, no hustle like that. What kind of music you listen to?","Bro Burna Boy is literally on my playlist every day 😭🙌 He's huge here in the US right now. Have you ever been to one of his concerts?","That's so cool honestly. I wish I could experience that. Do you think Nigeria will ever be as big globally as people say it will?","100% I believe that too. The culture, the music, the tech scene... Nigeria is moving 💪 What do you do for work if you don't mind me asking?","That's dope! Respect the hustle. Over here I work in logistics, it's decent but I want to do something more digital like what Nigerians are doing 😂","Facts. Honestly chatting with you is making me want to visit Nigeria soon. What time is it over there right now? 😄"]},
-{name:'EmiliaCute',flag:'🇬🇧',initials:'EC',color:'linear-gradient(135deg,#880E4F,#F06292)',country:'United Kingdom',rate:12000,msgs:["Hellooo 😊 I just got matched with you! I'm Emilia, from London. How are you doing today?","Aww that's lovely to hear! I've been speaking to a few Nigerians on here and honestly you lot are so friendly 😄 Where in Nigeria are you?","Oh I love that! My colleague at work is from Abuja and she always talks about how beautiful it is there. Is the weather nice this time of year?","Haha yes! I always complain about London weather 😂 It's been grey and rainy for like 3 weeks straight. I'm so jealous of you guys and your sunshine honestly.","Okay so I have to ask — jollof rice. Nigerian vs Ghanaian. Where do you stand? 😂","Hahaha I KNEW you'd say that 😂 She says the exact same thing with so much passion.","Right?? There's something about the smoky taste. What else should I know about Nigerian food?","Ohhh suya!! I've had that from a Nigerian restaurant in Peckham and it was 10/10 🔥","That's so cool. I love how food is such a big part of the culture.","Honestly you've convinced me to visit someday 😊"]},
-{name:'MattJohn',flag:'🇨🇦',initials:'MJ',color:'linear-gradient(135deg,#1B5E20,#66BB6A)',country:'Canada',rate:10000,msgs:["Hey there! I'm Matt from Toronto 👋 How are you?","Nice to meet you! Which part of Nigeria are you chatting from?","That's interesting. Toronto has a huge Nigerian community too.","Do you have friends or family in Canada?","What kind of work or study do you do?","That sounds cool. Nigerians here are very hardworking.","What do you enjoy doing in your free time?","Music is a big one here too. Afrobeats is everywhere.","Would you ever want to visit Canada?","Great chatting with you 😊"]},
-{name:'Abi1990',flag:'🇺🇸',initials:'AB',color:'linear-gradient(135deg,#E65100,#FFA726)',country:'United States',rate:15000,msgs:["Hey 😊 I'm Abi from Atlanta. How's your day?","Nice! Where in Nigeria are you from?","I've heard so much about Nigerian food and music.","What's the best thing about your city?","Do you prefer staying home or going out?","What music are you listening to lately?","That's a good choice 😄","What do you do for work or school?","Nigeria sounds full of energy.","I enjoyed this conversation 😊"]},
-{name:'princess77',flag:'🇩🇪',initials:'PR',color:'linear-gradient(135deg,#4A148C,#CE93D8)',country:'Germany',rate:8000,msgs:["Hello 😊 I'm based in Berlin. Nice to meet you!","Which state are you from in Nigeria?","My flatmate is Nigerian and talks about home all the time.","People here really enjoy Afrobeats now.","What is your favourite Nigerian meal?","I need to try that someday.","Do you get much time to relax?","What do you wish foreigners understood about Nigeria?","Nigeria is on my travel list.","Thank you for the lovely chat 😊"]},
-{name:'CamilaAnders',flag:'🇦🇺',initials:'CA',color:'linear-gradient(135deg,#006064,#4DD0E1)',country:'Australia',rate:10000,msgs:["G'day!! 😄 I'm Camila from Sydney. Are you really in Nigeria?","That's so far from me haha! Which part are you in?","Nigeria is much bigger than people realise.","Australia has very different regions too.","What's the vibe where you are?","Are you more of a city person?","Do you enjoy road trips?","Nigeria must have beautiful scenery.","Afrobeats is huge here now 🔥","Great talking with you 😄"]}
+const PARTNERS = [
+  { name:'alexlab102', flag:'🇺🇸', initials:'AL', country:'United States', rate:15000, color:'linear-gradient(135deg,#1565C0,#42A5F5)', messages:["Hey! 👋 I just got matched with you on here. I'm Alex. How is your day going?","Nice! Which part of Nigeria are you chatting from?","That sounds interesting. What do you enjoy most about where you live?","I’ve heard Nigerian music is amazing. What are you listening to lately?","That’s a good choice 😄 What do you do for work or school?","Respect. What do you usually do in your free time?","Would you ever like to visit the United States?","What is one thing people misunderstand about Nigeria?","I’ve enjoyed learning from you today.","Great chatting with you 😊"] },
+  { name:'EmiliaCute', flag:'🇬🇧', initials:'EC', country:'United Kingdom', rate:12000, color:'linear-gradient(135deg,#880E4F,#F06292)', messages:["Hellooo 😊 I just got matched with you! How are you doing today?","Lovely! Where in Nigeria are you?","What is the weather like there today?","London has been rainy lately 😂","I have to ask—what is your favourite Nigerian meal?","That sounds delicious.","What kind of music do you enjoy?","Afrobeats is everywhere here now.","Would you ever visit London?","It was lovely chatting with you 😊"] },
+  { name:'MattJohn', flag:'🇨🇦', initials:'MJ', country:'Canada', rate:10000, color:'linear-gradient(135deg,#1B5E20,#66BB6A)', messages:["Hey there! I’m Matt 👋 How are you?","Which part of Nigeria are you chatting from?","Toronto has a large Nigerian community too.","Do you have friends or family abroad?","What kind of work or study do you do?","That sounds cool.","What do you enjoy doing in your free time?","Afrobeats is everywhere here.","Would you ever want to visit Canada?","Great chatting with you 😊"] },
+  { name:'Abi1990', flag:'🇺🇸', initials:'AB', country:'United States', rate:15000, color:'linear-gradient(135deg,#E65100,#FFA726)', messages:["Hey 😊 How’s your day?","Where in Nigeria are you from?","I’ve heard so much about Nigerian food and music.","What’s the best thing about your city?","Do you prefer staying home or going out?","What music are you listening to lately?","That’s a good choice 😄","What do you do for work or school?","Nigeria sounds full of energy.","I enjoyed this conversation 😊"] },
+  { name:'princess77', flag:'🇩🇪', initials:'PR', country:'Germany', rate:8000, color:'linear-gradient(135deg,#4A148C,#CE93D8)', messages:["Hello 😊 Nice to meet you!","Which state are you from in Nigeria?","My friend talks about Nigeria all the time.","People here really enjoy Afrobeats now.","What is your favourite Nigerian meal?","I need to try that someday.","Do you get much time to relax?","What do you wish visitors understood about Nigeria?","Nigeria is on my travel list.","Thank you for the lovely chat 😊"] },
+  { name:'CamilaAnders', flag:'🇦🇺', initials:'CA', country:'Australia', rate:10000, color:'linear-gradient(135deg,#006064,#4DD0E1)', messages:["G’day!! 😄 Are you really in Nigeria?","That’s so far from me! Which part are you in?","Nigeria is much bigger than people realise.","Australia has very different regions too.","What’s the vibe where you are?","Are you more of a city person?","Do you enjoy road trips?","Nigeria must have beautiful scenery.","Afrobeats is huge here now 🔥","Great talking with you 😄"] }
 ];
-const PARTNER_FACTS={
-  alexlab102:{city:'Houston',job:'logistics',music:'Afrobeats and hip-hop'},
-  EmiliaCute:{city:'London',job:'office administration',music:'Afrobeats and R&B'},
-  MattJohn:{city:'Toronto',job:'customer support',music:'Afrobeats and pop'},
-  Abi1990:{city:'Atlanta',job:'healthcare',music:'Afrobeats and gospel'},
-  princess77:{city:'Berlin',job:'design',music:'Afrobeats and electronic music'},
-  CamilaAnders:{city:'Sydney',job:'hospitality',music:'Afrobeats and pop'}
-};
-const DEFAULT_QUICK=['That’s interesting 😊','Tell me more about that','How about you?','What happened next?'];
-function includesAny(text,items){const t=String(text||'').toLowerCase();return items.some(x=>t.includes(x))}
-function extractKnownPlace(text){const places=['Lagos','Ogun','Abeokuta','Ago-Iwoye','Abuja','Kano','Ibadan','Port Harcourt','Enugu','Benin','Ilorin','Kaduna','Owerri','Akure','Osogbo','Calabar','Uyo'];const lower=String(text||'').toLowerCase();return places.find(p=>lower.includes(p.toLowerCase()))||''}
-function contextualSuggestions(prompt=''){
-  const p=String(prompt||'').toLowerCase();
-  if(includesAny(p,['how are you','how are you doing','how is your day','how\'s your day']))return ['I’m good, thanks 😊','My day is going well','A little busy, but I’m okay','I’m fine. How about you?'];
-  if(includesAny(p,['which part of nigeria','where in nigeria','which state','where are you from','where are you chatting from']))return ['I’m from Lagos','I’m from Ogun State','I’m in Abuja','I’m from Nigeria. What about you?'];
-  if(includesAny(p,['weather','sunshine','rainy','raining']))return ['It’s warm and sunny here','It has been raining lately','The weather is nice today','How is the weather there?'];
-  if(includesAny(p,['jollof','food','meal','suya','eat']))return ['Nigerian jollof wins 😂','I love jollof rice and chicken','You should try suya','What food do you enjoy there?'];
-  if(includesAny(p,['music','artist','afrobeats','burna boy','wizkid','davido']))return ['I listen to Afrobeats','Burna Boy is one of my favourites','I also like Wizkid and Davido','What music do you listen to?'];
-  if(includesAny(p,['work','study','school','course','what do you do']))return ['I’m a student','I work in tech','I run a small business','What do you do there?'];
-  if(includesAny(p,['free time','hobby','relax','stay home','go out','road trip']))return ['I mostly relax at home','I enjoy music and movies','I like going out with friends','What do you do for fun?'];
-  if(includesAny(p,['visit nigeria','visit canada','travel','travel list','would you ever']))return ['Yes, I’d love to travel someday','Nigeria has many places to visit','I’d like to see your city too','What place would you recommend?'];
-  if(includesAny(p,['what time','time is it']))return [`It’s ${new Date().toLocaleTimeString('en-NG',{timeZone:'Africa/Lagos',hour:'2-digit',minute:'2-digit'})} here`,`What time is it where you are?`,'We’re in different time zones 😄','Are you usually awake this late?'];
-  if(includesAny(p,['do you have friends','family in']))return ['Not yet, but I know a few people abroad','I have some relatives outside Nigeria','No, but I’d like to visit','Do you know many Nigerians there?'];
-  return DEFAULT_QUICK;
+
+let authUser = null;
+let currentPartner = null;
+let busy = false;
+let selectedBank = 'opay';
+let currentScreen = 'landing';
+let state = freshState();
+let pendingShareAt = 0;
+
+function freshState() {
+  return { name:'User', balance:SIGNUP_BONUS, chatEarnings:0, replyCount:0, firstCycleComplete:false, withdrawal:null, shares:0, kycOpened:false, partnerTurns:{}, conversations:{} };
 }
-function answerPartnerQuestion(userText,lastPrompt){
-  const u=String(userText||'').trim(),l=String(lastPrompt||'').toLowerCase(),lower=u.toLowerCase(),facts=PARTNER_FACTS[currentChatUser?.name]||{};
-  if(includesAny(lower,['where are you','where do you live','which city are you']))return `I’m in ${facts.city||currentChatUser?.country||'my city'}.`;
-  if(includesAny(lower,['what do you do','your work','your job']))return `I work in ${facts.job||'a regular job'} here.`;
-  if(includesAny(lower,['how are you','how about you']))return 'I’m doing well, thanks for asking 😊';
-  if(includesAny(lower,['what music','which music','favourite artist']))return `I listen to ${facts.music||'a mix of music'}.`;
-  if(includesAny(l,['how are you','how are you doing','how is your day','how\'s your day']))return includesAny(lower,['not good','bad','sad','tired','stressed','rough'])?'Sorry to hear that. I hope your day gets better.':'Glad to hear that 😊';
-  if(includesAny(l,['which part of nigeria','where in nigeria','which state','where are you from','where are you chatting from'])){const place=extractKnownPlace(u);return place?`Nice, ${place}!`:'Nice!';}
-  if(includesAny(l,['weather','sunshine','rainy','raining']))return includesAny(lower,['rain','cold'])?'That sounds like a cool, rainy day.':'That sounds pleasant.';
-  if(includesAny(l,['jollof','food','meal','suya']))return includesAny(lower,['jollof','suya'])?'Good choice 😂 That sounds delicious.':'I’d like to try that.';
-  if(includesAny(l,['music','artist','afrobeats','burna boy']))return 'Nice choice — Afrobeats has become huge here too.';
-  if(includesAny(l,['work','study','school','course','what do you do']))return 'That sounds interesting. Respect for what you’re doing.';
-  if(includesAny(l,['free time','hobby','relax','stay home','go out']))return 'That sounds like a good way to spend your free time.';
-  return u.length<4?'I understand.':'That makes sense.';
+function storageKey() { return `chatearn_state_${authUser?.id || 'guest'}`; }
+function loadState() {
+  try { state = { ...freshState(), ...JSON.parse(localStorage.getItem(storageKey()) || '{}') }; } catch { state = freshState(); }
 }
-function getNextReply(userText){
-  const nextIndex=Math.min(currentPartnerTurn,currentChatUser.msgs.length-1),followUp=currentChatUser.msgs[nextIndex]||'Tell me more about that 😊',bridge=answerPartnerQuestion(userText,lastPartnerMessage);
-  if(currentPartnerTurn>=currentChatUser.msgs.length)return `${bridge} I’ve enjoyed this conversation. What else would you like to talk about?`;
-  return `${bridge} ${followUp}`.replace(/\s+/g,' ').trim();
+function saveState() { localStorage.setItem(storageKey(), JSON.stringify(state)); renderBalances(); }
+function money(value) { return `₦${Number(value || 0).toLocaleString('en-NG')}`; }
+function byId(id) { return document.getElementById(id); }
+function notify(message, bad=false) {
+  const toast = byId('toast'); if (!toast) return;
+  toast.textContent = message; toast.className = bad ? 'toast show error' : 'toast show';
+  clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.className = 'toast', 3000);
+}
+function goScreen(id) {
+  document.querySelectorAll('.screen').forEach(screen => { screen.classList.remove('active'); screen.style.display='none'; });
+  const target = byId(id); if (!target) return;
+  target.classList.add('active');
+  target.style.display = ['loading','processing'].includes(id) ? 'flex' : 'block';
+  if (['loading','processing'].includes(id)) Object.assign(target.style,{flexDirection:'column',alignItems:'center',justifyContent:'center'});
+  currentScreen = id; scrollTo({top:0});
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'earnings') renderEarnings();
+  if (id === 'withdraw') renderWithdraw();
+}
+window.goScreen = goScreen;
+
+function renderBalances() {
+  const pairs = [['dashBalance',money(state.balance)],['earnPageAmount',Number(state.balance).toLocaleString('en-NG')],['chatEarnBreakdown',money(state.chatEarnings)],['totalEarnBreakdown',money(state.balance)],['wdAmount',money(state.balance)],['ppAmount',money(state.balance)]];
+  pairs.forEach(([id,text]) => { const el=byId(id); if(el) el.textContent=text; });
+  const teaser = byId('wdTeaserSub'), button = byId('wdTeaserBtn');
+  if (teaser) teaser.textContent = state.balance >= MIN_WITHDRAW ? `${money(state.balance)} available for withdrawal` : `Minimum: ${money(MIN_WITHDRAW)} — Chat to unlock`;
+  if (button) { button.textContent = state.balance >= MIN_WITHDRAW ? 'Withdraw →' : 'Locked 🔒'; button.disabled = state.balance < MIN_WITHDRAW; }
+}
+function renderDashboard() {
+  if (byId('dashName')) byId('dashName').textContent = `Welcome, ${String(state.name||'User').split(' ')[0]}!`;
+  renderBalances();
+}
+function renderEarnings() { renderBalances(); }
+function renderWithdraw() { renderBalances(); }
+
+function openLogin() { byId('loginModal')?.classList.add('show'); }
+function closeLogin() { byId('loginModal')?.classList.remove('show'); }
+window.openLogin=openLogin; window.closeLogin=closeLogin;
+
+async function doRegister() {
+  const name=byId('regName')?.value.trim(), email=byId('regEmail')?.value.trim(), password=byId('regPass')?.value||'';
+  const errorBox=byId('regError');
+  if (!name || !email || password.length < 6) return notify('Complete all fields correctly.',true);
+  const button=byId('regSubmitBtn'); if(button){button.disabled=true;button.textContent='Creating account…';}
+  try {
+    const {data,error}=await client.auth.signUp({email,password,options:{data:{full_name:name}}});
+    if(error) throw error;
+    let session=data.session;
+    if(!session){const login=await client.auth.signInWithPassword({email,password});if(login.error)throw login.error;session=login.data.session;}
+    authUser=session?.user||data.user; if(!authUser) throw new Error('Account created but session could not start.');
+    state=freshState(); state.name=name; saveState();
+    runLoading(true);
+  } catch(error) { if(errorBox) errorBox.textContent=error.message; notify(error.message||'Registration failed.',true); }
+  finally { if(button){button.disabled=false;button.textContent='Create Account & Get ₦10,000 →';} }
+}
+window.doRegister=doRegister;
+
+async function doLogin() {
+  const email=byId('loginEmail')?.value.trim(), password=byId('loginPass')?.value||'', button=byId('loginBtn');
+  if(button){button.disabled=true;button.textContent='Logging in…';}
+  try {
+    const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)throw error;
+    authUser=data.user; loadState(); state.name=state.name||authUser.user_metadata?.full_name||email.split('@')[0]; saveState(); closeLogin(); runLoading(false);
+  } catch(error){const box=byId('loginError');if(box)box.textContent=error.message;notify(error.message||'Login failed.',true);}
+  finally{if(button){button.disabled=false;button.textContent='Log In & Continue →';}}
+}
+window.doLogin=doLogin;
+async function userLogout(){await client.auth.signOut();authUser=null;state=freshState();goScreen('landing');}
+window.userLogout=userLogout;
+
+function runLoading(isNew) {
+  goScreen('loading');
+  const title=byId('ldTitle'),sub=byId('ldSub'),fill=byId('ldFill');
+  if(title)title.textContent=isNew?'Setting Up Your Account':'Welcome Back';
+  if(sub)sub.textContent='Matching you with available conversations...';
+  let progress=0; const timer=setInterval(()=>{progress+=20;if(fill)fill.style.width=`${progress}%`;if(progress>=100){clearInterval(timer);renderDashboard();goScreen('dashboard');setTimeout(()=>openChat(Math.floor(Math.random()*PARTNERS.length)),450);}},260);
 }
 
-async function doRegister(){
-  const name=document.getElementById('regName').value.trim(),email=document.getElementById('regEmail').value.trim(),pass=document.getElementById('regPass').value,btn=document.getElementById('regSubmitBtn');
-  if(!name)return showToast('⚠️ Enter your full name');
-  if(!/^\S+@\S+\.\S+$/.test(email))return showToast('⚠️ Enter a valid email');
-  if(pass.length<6)return showToast('⚠️ Password must be at least 6 characters');
-  btn.disabled=true;btn.textContent='Creating account…';
-  trackEvent('registration_attempt',{email_domain:email.split('@')[1]||''});
-  try{
-    let {data,error}=await supabaseClient.auth.signUp({email,password:pass,options:{data:{full_name:name}}});
-    if(error)throw error;
-    if(!data.session){
-      const login=await supabaseClient.auth.signInWithPassword({email,password:pass});
-      if(login.error)throw new Error('Account created, but automatic login is unavailable. Turn off email confirmation in Supabase Auth settings.');
-      data=login.data;
-    }
-    currentUser=data.user;
-    userName=(data.user?.user_metadata?.full_name||name).split(' ')[0];
-    document.getElementById('dashName').textContent=userName+'!';
-    goScreen('loading');
-    const profilePromise=loadProfile({force:true,retries:4}).catch(error=>{console.warn('Profile setup:',error?.message||error);return null});
-    runLoadingSequence(profilePromise);
-    trackEvent('registration_success');
-  }catch(e){
-    trackEvent('registration_error',{message:e.message});
-    showToast('⚠️ '+e.message);
-    if(currentScreen==='loading')goScreen('register');
-    btn.disabled=false;btn.textContent='Create Account & Get ₦10,000 →';
-  }
+function conversation(key){state.conversations[key] ||= [];return state.conversations[key];}
+function addBubble(text,type,reward=0){
+  const body=byId('chatBody'); if(!body)return;
+  const wrap=document.createElement('div');wrap.className=`msg-row ${type==='user'?'mine':''}`;
+  const bubble=document.createElement('div');bubble.className=`msg-bubble ${type==='user'?'msg-mine':'msg-theirs'}`;bubble.textContent=text;
+  if(reward){const earn=document.createElement('div');earn.className='msg-earned';earn.textContent=`+${money(reward)} Earned`;bubble.appendChild(earn);}
+  wrap.appendChild(bubble);body.appendChild(wrap);body.scrollTop=body.scrollHeight;
 }
-function openLogin(){document.getElementById('loginModal').classList.add('show');trackEvent('login_opened')}
-function closeLogin(){document.getElementById('loginModal').classList.remove('show')}
-async function doLogin(){
-  const email=document.getElementById('loginEmail').value.trim(),password=document.getElementById('loginPass').value,btn=document.getElementById('loginBtn'),errEl=document.getElementById('loginError');
-  errEl.classList.remove('show');
-  if(!/^\S+@\S+\.\S+$/.test(email)){errEl.textContent='Enter a valid email address.';errEl.classList.add('show');return}
-  if(!password){errEl.textContent='Enter your password.';errEl.classList.add('show');return}
-  btn.disabled=true;btn.textContent='Logging in…';
-  try{
-    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
-    if(error)throw error;
-    currentUser=data.user;
-    userName=(data.user?.user_metadata?.full_name||email.split('@')[0]||'User').split(' ')[0];
-    closeLogin();
-    const balanceEl=document.getElementById('dashBalance');if(balanceEl)balanceEl.textContent='Loading…';
-    document.getElementById('dashName').textContent=userName+'!';
-    goScreen('dashboard');
-    const profilePromise=loadProfile({force:true,retries:1});
-    profilePromise.then(()=>{document.getElementById('dashName').textContent=userName+'!';updateBalance()}).catch(error=>{console.warn('Profile load:',error?.message||error);showToast('Logged in. Account details are still syncing.')});
-    deferWork(()=>runDailyCheckin(),350);
-    trackEvent('login_success');
-  }catch(e){
-    errEl.textContent=e.message||'Unable to log in. Please try again.';
-    errEl.classList.add('show');
-    trackEvent('login_error',{message:e.message});
-  }finally{
-    btn.disabled=false;btn.textContent='Log In & Continue →';
-  }
+function renderConversation() {
+  const body=byId('chatBody'); if(!body||!currentPartner)return; body.innerHTML='';
+  const items=conversation(currentPartner.name);
+  if(!items.length){const first=currentPartner.messages[0];items.push({type:'partner',text:first});saveState();}
+  items.forEach(item=>addBubble(item.text,item.type,item.reward||0));
+  renderQuickReplies(items.at(-1)?.text||'');
 }
-async function userLogout(){
-  if(!confirm('Log out of ChatEarn on this device?'))return;
-  try{await updatePresence(false);await supabaseClient.auth.signOut()}catch(e){}
-  currentUser=null;currentProfile=null;profileLoadedAt=0;threadsLoadedAt=0;threadsCache=[];userName='';totalBalance=SIGNUP_BONUS;chatEarnings=0;replyCount=0;currentChatUser=null;lastPartnerMessage='';currentPartnerTurn=0;
-  document.getElementById('chatBody').innerHTML='';document.getElementById('quickReplies').innerHTML='';goScreen('landing');showToast('Logged out successfully');trackEvent('user_logged_out')
+function renderQuickReplies(prompt) {
+  const root=byId('quickReplies');if(!root)return;
+  const lower=String(prompt).toLowerCase();let replies=['That’s interesting 😊','Tell me more','How about you?'];
+  if(lower.includes('how are'))replies=['I’m good, thanks 😊','My day is going well','I’m fine. How about you?'];
+  else if(lower.includes('where')||lower.includes('part of nigeria'))replies=['I’m from Lagos','I’m from Ogun State','I’m in Abuja'];
+  else if(lower.includes('music'))replies=['I enjoy Afrobeats','Burna Boy is one of my favourites','What music do you like?'];
+  else if(lower.includes('food')||lower.includes('meal'))replies=['I love jollof rice','You should try suya','What food do you enjoy?'];
+  root.innerHTML=replies.map(text=>`<button type="button" onclick="useQuickReply(${JSON.stringify(text).replace(/"/g,'&quot;')})">${text}</button>`).join('');
 }
-async function loadProfile(options={}){
-  if(!currentUser)return null;
-  const force=!!options.force,retries=Math.max(0,Number(options.retries||0));
-  if(!force&&currentProfile&&currentProfile.user_id===currentUser.id&&Date.now()-profileLoadedAt<PROFILE_CACHE_MS)return currentProfile;
-  if(profileLoadPromise)return profileLoadPromise;
-  profileLoadPromise=(async()=>{
-    let lastError=null;
-    for(let attempt=0;attempt<=retries;attempt++){
-      const {data,error}=await supabaseClient.from('chatearn_profiles').select('*').eq('user_id',currentUser.id).maybeSingle();
-      if(!error&&data){
-        currentProfile=data;profileLoadedAt=Date.now();
-        userName=(data.full_name||currentUser.email||'User').split(' ')[0];
-        totalBalance=Number(data.balance||SIGNUP_BONUS);replyCount=Number(data.total_messages||0);chatEarnings=Math.max(0,totalBalance-SIGNUP_BONUS);checkinStreak=Number(data.checkin_streak||0);lastCheckinDate=data.last_checkin_date||'';updateBalance();
-        return data;
-      }
-      lastError=error||new Error('Profile is still being prepared');
-      if(attempt<retries)await sleep(220+attempt*260);
-    }
-    throw lastError||new Error('Unable to load account profile');
-  })().finally(()=>{profileLoadPromise=null});
-  return profileLoadPromise;
+function useQuickReply(text){if(byId('chatInput'))byId('chatInput').value=text;sendMsg();}
+window.useQuickReply=useQuickReply;
+function openChat(index) {
+  currentPartner=PARTNERS[Number(index)]||PARTNERS[0];
+  byId('chatName').textContent=currentPartner.name;byId('chatAv').textContent=currentPartner.flag;byId('chatEarnBadge').textContent=`+${money(currentPartner.rate)}/reply`;
+  byId('chatStatus').textContent='🟢 Automated chat partner';
+  renderConversation();goScreen('chat');setTimeout(()=>byId('chatInput')?.focus(),150);
 }
-function runLoadingSequence(profilePromise=Promise.resolve()){
-  const steps=['ls1','ls2','ls3','ls4'],fill=document.getElementById('ldFill');let i=0;
-  steps.forEach(id=>{const s=document.getElementById(id);s?.classList.remove('done');const dot=s?.querySelector('.ld-step-dot');if(dot)dot.textContent=''});if(fill)fill.style.width='0%';
-  const iv=setInterval(()=>{
-    if(i<steps.length){const s=document.getElementById(steps[i]);s?.classList.add('done');const dot=s?.querySelector('.ld-step-dot');if(dot)dot.textContent='✓';if(fill)fill.style.width=((i+1)/steps.length*100)+'%';i++;return}
-    clearInterval(iv);
-    Promise.race([Promise.resolve(profilePromise),sleep(1200)]).finally(()=>setTimeout(()=>{
-      goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';updateBalance();trackEvent('dashboard_reached');const pickIdx=Math.floor(Math.random()*FOREIGNERS.length);setTimeout(()=>openChat(pickIdx),650)
-    },120));
-  },240);
+window.openChat=openChat;
+function handleEnter(event){if(event.key==='Enter'){event.preventDefault();sendMsg();}}
+window.handleEnter=handleEnter;
+async function sendMsg() {
+  if(busy||!currentPartner)return;const input=byId('chatInput'),text=input?.value.trim();if(!text)return;
+  if(!state.firstCycleComplete&&state.balance>=FIRST_CYCLE_LIMIT){notify(`You reached your first earning limit of ${money(FIRST_CYCLE_LIMIT)}. Withdraw to continue.`,true);goScreen('earnings');return;}
+  busy=true;input.disabled=true;input.value='';
+  const items=conversation(currentPartner.name);items.push({type:'user',text});addBubble(text,'user');
+  const reward=Math.min(currentPartner.rate,state.firstCycleComplete?currentPartner.rate:Math.max(0,FIRST_CYCLE_LIMIT-state.balance));
+  state.balance+=reward;state.chatEarnings+=reward;state.replyCount+=1;items[items.length-1].reward=reward;saveState();renderConversation();
+  if(state.balance>=FIRST_CYCLE_LIMIT&&!state.firstCycleComplete){notify(`First earning cycle reached ${money(FIRST_CYCLE_LIMIT)}.`);setTimeout(()=>goScreen('earnings'),900);busy=false;input.disabled=false;return;}
+  const turn=(state.partnerTurns[currentPartner.name]||0)+1;state.partnerTurns[currentPartner.name]=turn;saveState();
+  setTimeout(()=>{const reply=currentPartner.messages[Math.min(turn,currentPartner.messages.length-1)];items.push({type:'partner',text:reply});saveState();addBubble(reply,'partner');renderQuickReplies(reply);busy=false;input.disabled=false;input.focus();window.ChatEarnAds?.afterReply?.(state.replyCount,byId('chatBody'));},700);
 }
-async function renderConversationCards(options={}){
-  const cards=[...document.querySelectorAll('.foreigner-card')];let threads=[];
-  if(currentUser){
-    const force=!!options.force;
-    if(!force&&Date.now()-threadsLoadedAt<THREAD_CACHE_MS)threads=threadsCache;
-    else{
-      if(!threadsLoadPromise)threadsLoadPromise=supabaseClient.from('chatearn_chat_threads').select('partner_key,last_message_preview,last_message_at,unread_count').eq('user_id',currentUser.id).then(q=>{if(q.error)throw q.error;threadsCache=q.data||[];threadsLoadedAt=Date.now();return threadsCache}).finally(()=>{threadsLoadPromise=null});
-      try{threads=await threadsLoadPromise}catch(e){console.warn('Conversation list:',e?.message||e);threads=threadsCache}
-    }
-  }
-  cards.forEach((card,i)=>{const f=FOREIGNERS[i],t=threads.find(x=>x.partner_key===f.name);const body=card.querySelector('.fc-body');let p=body.querySelector('.fc-preview');if(!p){p=document.createElement('div');p.className='fc-preview';body.appendChild(p)}p.textContent=t?.last_message_preview||'Tap to start chatting';let meta=card.querySelector('.fc-meta');if(!meta){const old=card.querySelector('.fc-earn');if(old)old.style.display='none';meta=document.createElement('div');meta.className='fc-meta';meta.innerHTML='<div class="fc-time"></div><div class="fc-unread"></div><button class="fc-earn"></button>';card.appendChild(meta)}meta.querySelector('.fc-time').textContent=t?.last_message_at?ago(t.last_message_at):'';const u=meta.querySelector('.fc-unread');u.textContent=t?.unread_count||'';u.classList.toggle('show',Number(t?.unread_count||0)>0);meta.querySelector('.fc-earn').textContent='₦'+Math.round(f.rate/1000)+'K/reply'});
-}
-async function openChat(idx){
-  currentChatUser=FOREIGNERS[idx];lastPartnerMessage='';currentPartnerTurn=0;
-  document.getElementById('chatAv').innerHTML=`<div style="width:40px;height:40px;border-radius:50%;background:${currentChatUser.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#000;position:relative;">${currentChatUser.initials}<div class="ch-online"></div></div>`;
-  document.getElementById('chatName').textContent=currentChatUser.name;
-  document.getElementById('chatStatus').textContent='Guided chat · '+currentChatUser.country;
-  document.getElementById('chatEarnBadge').textContent='+₦'+currentChatUser.rate.toLocaleString('en-NG')+'/reply';
-  document.getElementById('chatBody').innerHTML='<div class="chat-day">Today</div>';goScreen('chat');renderQuickReplies([]);chatBusy=false;trackEvent('chat_opened',{partner:currentChatUser.name});
-  let history=[];
-  if(currentUser){const q=await supabaseClient.from('chatearn_chat_messages').select('id,sender,body,status,reward,created_at,client_message_id').eq('user_id',currentUser.id).eq('partner_key',currentChatUser.name).order('created_at',{ascending:true}).limit(100);history=q.data||[]}
-  if(history.length){
-    history.forEach(renderStoredMessage);
-    const partnerMessages=history.filter(m=>m.sender==='partner');currentPartnerTurn=partnerMessages.length;lastPartnerMessage=partnerMessages.at(-1)?.body||'';renderQuickReplies(contextualSuggestions(lastPartnerMessage));
-    await supabaseClient.from('chatearn_chat_threads').update({unread_count:0}).eq('user_id',currentUser.id).eq('partner_key',currentChatUser.name)
-  }else setTimeout(()=>deliverReply(currentChatUser.msgs[0],true),450)
-}
-function renderQuickReplies(items=contextualSuggestions(lastPartnerMessage)){
-  const el=document.getElementById('quickReplies');if(!el)return;el.innerHTML='';
-  items.slice(0,4).forEach(q=>{const b=document.createElement('button');b.type='button';b.className='quick-reply';b.textContent=q;b.addEventListener('click',()=>useQuickReply(q));el.appendChild(b)})
-}
-function useQuickReply(t){document.getElementById('chatInput').value=t;sendMsg();trackEvent('quick_reply_used',{text_length:t.length,partner:currentChatUser?.name||null,context:lastPartnerMessage.slice(0,120)})}
-function renderStoredMessage(m){const body=document.getElementById('chatBody'),wrap=document.createElement('div');wrap.className='msg '+(m.sender==='user'?'outgoing':'incoming');wrap.dataset.clientId=m.client_message_id||'';wrap.innerHTML=`<div class="msg-bubble">${esc(m.body)}</div><div class="msg-time">${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${m.sender==='user'?` <span class="msg-status">${m.status==='read'?'✓✓':'✓'}</span>`:''}</div>${m.reward?`<div class="msg-earn">+${money(m.reward)} earned! 💰</div>`:''}${m.sender==='partner'?'<div class="msg-actions"><button class="msg-react" onclick="reactToMessage(this,\'👍\')">👍</button><button class="msg-react" onclick="reactToMessage(this,\'❤️\')">❤️</button></div>':''}`;body.appendChild(wrap);body.scrollTop=body.scrollHeight}
-function reactToMessage(btn,emoji){btn.parentElement.innerHTML=`<span style="font-size:16px;">${emoji}</span>`;trackEvent('message_reaction',{emoji})}
-function addTyping(){const body=document.getElementById('chatBody'),typing=document.createElement('div');typing.className='typing-indicator';typing.id='typingIndicator';typing.innerHTML='<div class="ti-dot"></div><div class="ti-dot"></div><div class="ti-dot"></div>';body.appendChild(typing);body.scrollTop=body.scrollHeight}
-async function deliverReply(text,isOpening=false){if(!currentChatUser)return;renderQuickReplies([]);addTyping();document.getElementById('chatStatus').textContent='typing…';const delay=Math.min(850+text.length*18,3200);setTimeout(async()=>{document.getElementById('typingIndicator')?.remove();const cid=crypto.randomUUID(),msg={sender:'partner',body:text,status:'read',reward:0,created_at:new Date().toISOString(),client_message_id:cid};renderStoredMessage(msg);lastPartnerMessage=text;currentPartnerTurn+=1;document.getElementById('chatStatus').textContent='Guided chat · '+currentChatUser.country;renderQuickReplies(contextualSuggestions(text));if(currentUser){const {error}=await supabaseClient.rpc('chatearn_store_partner_message',{p_partner_key:currentChatUser.name,p_body:text,p_client_message_id:cid});if(error)console.warn('Partner message store:',error.message)}trackEvent(isOpening?'chat_opening_message':'partner_reply_delivered',{partner:currentChatUser.name,message_length:text.length,turn:currentPartnerTurn});chatBusy=false;if(!isOpening&&replyCount>0&&replyCount%4===0)maybeAddMedia()},delay)}
-function maybeAddMedia(){if(Math.random()>.45)return;const body=document.getElementById('chatBody');if(Math.random()<.5){const durs=['0:07','0:12','0:16'],dur=durs[Math.floor(Math.random()*durs.length)],bars=Array.from({length:18},()=>`<div class="vb-bar" style="height:${4+Math.floor(Math.random()*16)}px;background:var(--green);opacity:.7"></div>`).join('');const w=document.createElement('div');w.className='msg incoming';w.innerHTML=`<div class="voice-bubble" onclick="trackEvent('voice_note_played')"><div class="vb-play">▶</div><div class="vb-wave">${bars}</div><div class="vb-dur">${dur}</div></div><div class="msg-time">${getTime()}</div>`;body.appendChild(w)}else{const icons=['🏖️','🌆','🎉','🌸'],w=document.createElement('div');w.className='msg incoming';w.innerHTML=`<div class="photo-bubble" onclick="trackEvent('photo_opened')"><div class="photo-bubble-inner">${icons[Math.floor(Math.random()*icons.length)]}</div><div class="photo-bubble-cap">Look at this 😊</div></div><div class="msg-time">${getTime()}</div>`;body.appendChild(w)}body.scrollTop=body.scrollHeight}
-function handleEnter(e){if(e.key==='Enter')sendMsg()}
-async function sendMsg(){if(chatBusy||!currentChatUser)return;if(totalBalance>=MAX_EARN){showToast('⚠️ Maximum earnings reached! Please withdraw first.');forceWithdraw();return}const input=document.getElementById('chatInput'),text=input.value.trim();if(!text)return;input.value='';chatBusy=true;const clientId=crypto.randomUUID(),temp={sender:'user',body:text,status:navigator.onLine?'sent':'pending',reward:0,created_at:new Date().toISOString(),client_message_id:clientId};renderStoredMessage(temp);if(!navigator.onLine){pendingMessageQueue.push({text,clientId,partner:currentChatUser.name});localStorage.setItem('ce_pending_messages',JSON.stringify(pendingMessageQueue));document.getElementById('offlineStrip').classList.add('show');chatBusy=false;return}await submitMessage(text,clientId)}
-async function submitMessage(text,clientId){try{const {data,error}=await supabaseClient.rpc('chatearn_send_message',{p_partner_key:currentChatUser.name,p_body:text,p_client_message_id:clientId,p_session_id:SESSION_ID});if(error)throw error;const r=Array.isArray(data)?data[0]:data;const reward=Number(r.reward||0);totalBalance=Number(r.balance||totalBalance);replyCount=Number(r.total_messages||replyCount+1);chatEarnings=Math.max(0,totalBalance-SIGNUP_BONUS);const el=document.querySelector(`.msg[data-client-id="${clientId}"]`);if(el){el.querySelector('.msg-status').textContent='✓✓';if(reward){const earn=document.createElement('div');earn.className='msg-earn';earn.textContent='+'+money(reward)+' earned! 💰';el.appendChild(earn)}}showEarnToast('+'+money(reward)+' Earned! 💰');updateBalance();if(totalBalance>=MIN_WITHDRAW&&!withdrawPrompted){withdrawPrompted=true;promptWithdraw()}trackEvent('user_message_sent',{partner:currentChatUser.name,message_length:text.length,reward});setTimeout(()=>deliverReply(getNextReply(text)),250)}catch(e){const el=document.querySelector(`.msg[data-client-id="${clientId}"]`);if(el){el.classList.add('failed');const retry=document.createElement('div');retry.className='msg-retry';retry.textContent='Failed to send · tap to retry';retry.onclick=()=>{retry.remove();el.classList.remove('failed');submitMessage(text,clientId)};el.appendChild(retry)}chatBusy=false;showToast('⚠️ '+e.message)}}
-async function flushPendingMessages(){try{pendingMessageQueue=JSON.parse(localStorage.getItem('ce_pending_messages')||'[]')}catch(e){}if(!pendingMessageQueue.length||!navigator.onLine)return;const q=[...pendingMessageQueue];pendingMessageQueue=[];localStorage.removeItem('ce_pending_messages');for(const m of q){currentChatUser=FOREIGNERS.find(f=>f.name===m.partner)||currentChatUser;await submitMessage(m.text,m.clientId)}}
-function updateBalance(){const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v};set('dashBalance',money(totalBalance));set('earnPageAmount',Number(totalBalance).toLocaleString('en-NG'));set('chatEarnBreakdown',money(chatEarnings));set('totalEarnBreakdown',money(totalBalance));set('wdAmount',money(totalBalance));const b=document.getElementById('wdTeaserBtn');if(totalBalance>=MIN_WITHDRAW){b.textContent='Withdraw 💰';b.classList.add('active');document.getElementById('wdTeaserSub').textContent=money(totalBalance)+' ready to withdraw!'}else{b.textContent='Locked 🔒';b.classList.remove('active');document.getElementById('wdTeaserSub').textContent='Minimum: ₦40,000 — Chat to unlock'}}
-function promptWithdraw(){if(document.getElementById('wdPromptNotice'))return;const body=document.getElementById('chatBody'),notice=document.createElement('div');notice.id='wdPromptNotice';notice.style.cssText='background:rgba(0,200,83,.12);border:1px solid rgba(0,200,83,.3);border-radius:12px;padding:14px;margin:10px 0;text-align:center';notice.innerHTML=`<div style="font-size:24px">🎉</div><div style="font-size:15px;font-weight:800;color:#00E676">${money(totalBalance)} Earned!</div><div style="font-size:12px;color:#B0B0B0;margin:5px 0 10px">Withdrawal available.</div><button onclick="goScreen('earnings')" style="background:#00C853;color:#000;border:0;border-radius:10px;padding:10px 20px;font-weight:800">Withdraw Now →</button>`;body.appendChild(notice)}
-function forceWithdraw(){promptWithdraw()}function tryWithdraw(){totalBalance>=MIN_WITHDRAW?goScreen('earnings'):showToast('⚠️ Keep chatting! Minimum withdrawal is ₦40,000')}
+window.sendMsg=sendMsg;
 
-let bankVerifyTimer=null;async function triggerBankVerify(val){const statusEl=document.getElementById('bankVerifyStatus');clearTimeout(bankVerifyTimer);const digits=String(val).replace(/\D/g,'').slice(0,10);if(String(val)!==digits)document.getElementById('wdAccNo').value=digits;if(digits.length<10){statusEl.style.display='none';return}statusEl.style.display='block';statusEl.style.background='rgba(255,193,7,.1)';statusEl.style.border='1px solid rgba(255,193,7,.3)';statusEl.style.color='#FFD600';statusEl.innerHTML='<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> Verifying account…';trackEvent('bank_verify_started',{bank:selectedBank});bankVerifyTimer=setTimeout(async()=>{const bankName=selectedBank==='opay'?'OPay':'PalmPay';statusEl.style.background='rgba(0,200,83,.1)';statusEl.style.border='1px solid rgba(0,200,83,.3)';statusEl.style.color='#00E676';statusEl.innerHTML='✅ Account Verified — '+bankName;try{await supabaseClient.rpc('chatearn_record_bank_check',{p_bank:selectedBank,p_account_number:digits,p_status:'accepted',p_session_id:SESSION_ID})}catch(e){}trackEvent('bank_verify_success',{bank:selectedBank,masked:digits.slice(0,3)+'*****'+digits.slice(-2)})},1800)}
-function selectBank(bank){selectedBank=bank;document.getElementById('bankOpay').classList.toggle('selected',bank==='opay');document.getElementById('bankPalmpay').classList.toggle('selected',bank==='palmpay');trackEvent('bank_selected',{bank})}
-async function placeWithdrawal(){const acc=document.getElementById('wdAccNo').value.trim(),name=document.getElementById('wdAccName').value.trim();if(!/^\d{10}$/.test(acc))return showToast('⚠️ Enter a valid 10-digit account number');if(name.length<3)return showToast('⚠️ Enter your account name');try{const {data,error}=await supabaseClient.rpc('chatearn_request_withdrawal',{p_bank:selectedBank,p_account_number:acc,p_account_name:name,p_amount:totalBalance,p_session_id:SESSION_ID});if(error)throw error;const r=Array.isArray(data)?data[0]:data;withdrawalAmount=Number(r.amount||totalBalance);withdrawalBank=selectedBank;withdrawalAcc=acc;swShares=0;shareFailTriggered=false;trackEvent('withdrawal_submitted',{bank:selectedBank,amount:withdrawalAmount});goScreen('sharewall');const bankName=withdrawalBank==='opay'?'OPay':'PalmPay';document.getElementById('swHeroTitle').textContent='Verify to Receive '+money(withdrawalAmount);document.getElementById('swHeroSub').innerHTML=`To process your <strong>${money(withdrawalAmount)} withdrawal</strong> to <strong>${bankName}</strong>, share ChatEarn with 5 Nigerian friends to verify your account.`;document.getElementById('swFill').style.width='0%';document.getElementById('swPct').textContent='0%';document.getElementById('swStatus').textContent='Share with 5 friends to unlock withdrawal';document.getElementById('swBtnText').textContent='Share on WhatsApp to Verify'}catch(e){showToast('⚠️ '+e.message);trackEvent('withdrawal_error',{message:e.message})}}
-function getMsg(){const amt=withdrawalAmount||totalBalance,ref=currentUser?.id?'?ref='+encodeURIComponent(currentUser.id):'';return `💰 I just earned ${money(amt)} on ChatEarn chatting with foreigners!\n\nThis app pays Nigerians to chat with people from USA 🇺🇸, UK 🇬🇧, Canada 🇨🇦 and more.\n\n✅ Free to join\n✅ Earn ₦8,000–₦15,000 per reply\n✅ Withdraw to OPay/PalmPay\n\nSign up here 👇\n${SITE}${ref}\n${SITE}${ref}\n${SITE}${ref}\n\nIt's real — I'm withdrawing mine now! 🔥`}
-let swBusy=false,shareOpenedAt=0;function doShareWA(){if(swBusy||swShares>=REQ)return;swBusy=true;shareOpenedAt=Date.now();trackEvent('whatsapp_share_opened',{step:swShares+1});window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(getMsg()),'_blank');setTimeout(()=>{swBusy=false;swShares++;const pct=Math.round(swShares/REQ*100),rem=REQ-swShares;document.getElementById('swFill').style.width=pct+'%';document.getElementById('swPct').textContent=pct+'%';document.getElementById('swStatus').textContent=rem?rem+' more friend'+(rem>1?'s':'')+' needed':'Account verified! ✓';document.getElementById('swBtnText').textContent=rem?'Share Again ('+rem+' more)':'Verified ✓';supabaseClient.rpc('chatearn_record_share_attempt',{p_session_id:SESSION_ID,p_step:swShares,p_seconds_away:Math.round((Date.now()-shareOpenedAt)/1000),p_returned:true});trackEvent('whatsapp_returned',{step:swShares,progress:pct});if(!rem)setTimeout(()=>goScreen('kyc'),800)},1800)}
-async function doKYC(){trackEvent('kyc_external_clicked');try{await supabaseClient.rpc('chatearn_create_kyc_request',{p_external_url:AFF,p_session_id:SESSION_ID})}catch(e){}window.open(AFF,'_blank');setTimeout(()=>{const ref='CE-'+Math.floor(100000+Math.random()*900000),bankName=withdrawalBank==='opay'?'OPay':'PalmPay';goScreen('processing');document.getElementById('ppRef').textContent=ref;document.getElementById('ppAmount').textContent=money(withdrawalAmount);document.getElementById('ppBank').textContent=bankName;document.getElementById('ppBankNote').textContent=`Your ${bankName} account (${withdrawalAcc.slice(0,3)}*****${withdrawalAcc.slice(-2)}) will receive ${money(withdrawalAmount)} within 24 hours.`;trackEvent('processing_reached',{reference:ref})},1500)}
-function shareAgain(){window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(getMsg()),'_blank');trackEvent('share_again_clicked')}function trackClick(spot){trackEvent('external_link_clicked',{spot:spot});return true}function getTime(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}function showEarnToast(msg){const t=document.getElementById('earnToast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
-async function runDailyCheckin(){if(!currentUser)return;try{const {data,error}=await supabaseClient.rpc('chatearn_claim_checkin');if(error&& !/already/i.test(error.message))throw error;if(data&&data.length){const r=data[0];checkinStreak=Number(r.streak||checkinStreak);totalBalance=Number(r.balance||totalBalance);document.getElementById('streakTitle').textContent='Day '+checkinStreak+' Streak!';document.getElementById('streakReward').textContent=money(r.reward||0);document.getElementById('streakModal').style.display='flex';updateBalance()}}catch(e){}}
-function claimStreak(){document.getElementById('streakModal').style.display='none';showEarnToast('Daily bonus claimed! 🔥')}
-
-async function loadRealPublicActivity(){try{const {data}=await supabaseClient.rpc('chatearn_public_stats');if(data&&data.length){document.getElementById('liveCounter').textContent=money(data[0].paid_today||0);const badge=document.querySelector('.st-badge');if(badge)badge.textContent=Number(data[0].online_now||0).toLocaleString()+' Online'}}catch(e){}}
-function subscribePublicActivity(){supabaseClient.channel('ce-public').on('postgres_changes',{event:'INSERT',schema:'public',table:'chatearn_public_activity'},payload=>{const ev=payload.new;const t=document.getElementById('activityToast');document.getElementById('atAv').textContent='CE';document.getElementById('atAv').style.background='#00C853';document.getElementById('atName').textContent=ev.display_name||'ChatEarn member';document.getElementById('atAction').textContent=ev.event_type==='withdrawal_approved'?'received '+money(ev.amount||0)+' 🎉':ev.event_type==='chat_activity'?'completed a chat activity 💬':'just joined ChatEarn';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}).subscribe()}
-async function diagnosePush(source='browser_check'){let permission=typeof Notification==='undefined'?'unsupported':Notification.permission,status='none',worker=false;try{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();worker=regs.some(r=>String(r.active?.scriptURL||'').includes('sw-check-permissions-3d5d7.js'));for(const r of regs){if(r.pushManager){const sub=await r.pushManager.getSubscription();if(sub){status='subscribed';break}}}}}catch(e){status='error'}trackEvent('propush_status',{source,permission,subscription:status,worker_detected:worker})}
-window.handleProPushResult=result=>{trackEvent('propush_loader',{result:String(result)});setTimeout(()=>diagnosePush(String(result)),1000)};
-
-function byId(id){return document.getElementById(id)}
-function putHtml(id,value){const el=byId(id);if(el)el.innerHTML=value}
-function putText(id,value){const el=byId(id);if(el)el.textContent=value}
-function kpi(value,label){return `<div class="admin-card"><div class="admin-kpi">${esc(value)}</div><div class="admin-label">${esc(label)}</div></div>`}
-function empty(text){return `<div class="admin-empty">${esc(text)}</div>`}
-const lagosDateFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'});
-const lagosTimeFormatter=new Intl.DateTimeFormat('en-NG',{timeZone:'Africa/Lagos',dateStyle:'medium',timeStyle:'short'});
-function lagosDateKey(ts=Date.now()){try{return lagosDateFormatter.format(new Date(ts))}catch{return''}}
-function formatLagos(ts){try{return lagosTimeFormatter.format(new Date(ts))}catch{return'—'}}
-function eventToday(e){return lagosDateKey(e?.created_at)===lagosDateKey()}
-function eventIdentity(e){return e?.visitor_id||e?.user_id||e?.session_id||e?.id||''}
-function registrationIdentity(e){return e?.user_id||e?.visitor_id||e?.session_id||e?.id||''}
-function isAdminPageValue(value){return String(value||'').toLowerCase().includes('admin')}
-function countEvent(name,events=adminData.events){return events.filter(e=>e.event_name===name).length}
-function uniqueEvent(name,events=adminData.events){return new Set(events.filter(e=>e.event_name===name).map(eventIdentity).filter(Boolean)).size}
-function uniqueRegistrations(events=adminData.events){return new Set(events.filter(e=>e.event_name==='registration_success').map(registrationIdentity).filter(Boolean)).size}
-function profileFor(userId){return userId?adminData.profiles.find(p=>p.user_id===userId):null}
-function eventActor(e){const p=profileFor(e?.user_id);return p?.full_name||p?.email||'Anonymous visitor'}
-const EVENT_LABELS={site_enter:'Entered the site',landing_view:'Viewed landing page',start_clicked:'Tapped Start',registration_started:'Started registration',registration_attempt:'Attempted registration',registration_success:'Completed registration',registration_error:'Registration failed',dashboard_reached:'Reached dashboard',chat_opened:'Opened a chat',chat_opening_message:'Opening message shown',user_message_sent:'Sent a chat message',partner_reply_delivered:'Received a chat reply',earnings_opened:'Opened earnings',withdrawal_opened:'Opened withdrawal',withdrawal_submitted:'Submitted withdrawal',withdrawal_approved:'Withdrawal approved',withdrawal_rejected:'Withdrawal rejected',share_page_reached:'Reached share page',whatsapp_share_opened:'Opened WhatsApp sharing',whatsapp_returned:'Returned from WhatsApp',kyc_opened:'Opened KYC',kyc_external_clicked:'Opened KYC partner link',kyc_approved:'KYC approved',kyc_rejected:'KYC rejected',processing_reached:'Reached processing page',propush_status:'ProPush browser check',propush_loader:'ProPush script event',page_view:'Opened a page',page_exit:'Left a page',js_error:'JavaScript error',session_restored:'Returned to account'};
-function eventLabel(name){return EVENT_LABELS[name]||String(name||'activity').replaceAll('_',' ')}
-const TECHNICAL_EVENTS=new Set(['page_view','page_exit','propush_status','propush_loader','presence_heartbeat','session_restored']);
-function isImportantEvent(e){return !TECHNICAL_EVENTS.has(e.event_name)&&e.event_name!=='js_error'}
-function setAdminRealtimeState(state,text){const dot=byId('adminRealtimeDot'),label=byId('adminRealtimeText');if(dot){dot.classList.remove('connecting','connected','disconnected');dot.classList.add(state)}if(label)label.textContent=text}
-function adminPanelIsOpen(){return !!(byId('adminShell')?.classList.contains('show')&&byId('adminContent')&&byId('adminContent').style.display!=='none')}
-function updateAdminLiveClock(){
-  const el=byId('adminAutoRefreshText');if(!el)return;
-  const seconds=Math.max(0,Math.ceil((adminNextPollAt-Date.now())/1000));
-  const rt=adminRealtimeReady?(adminLastRealtimeAt?`Realtime event ${ago(adminLastRealtimeAt)}`:'Realtime connected'):'Realtime unavailable';
-  el.textContent=`${rt} · backup refresh in ${seconds}s`;
-  if(adminPanelIsOpen()&&Date.now()%5000<1100){renderOverview();renderLive()}
+function tryWithdraw(){if(state.balance<MIN_WITHDRAW)return notify(`${money(MIN_WITHDRAW-state.balance)} remaining before withdrawal.`,true);goScreen('earnings');}
+window.tryWithdraw=tryWithdraw;
+function selectBank(bank){selectedBank=bank;byId('bankOpay')?.classList.toggle('selected',bank==='opay');byId('bankPalmpay')?.classList.toggle('selected',bank==='palmpay');}
+window.selectBank=selectBank;
+function triggerBankVerify(value){const box=byId('bankVerifyStatus');if(!box)return;if(String(value).length===10){box.style.display='block';box.style.background='rgba(0,200,83,.08)';box.style.color='#69F0AE';box.textContent='✓ Account number format accepted';}else box.style.display='none';}
+window.triggerBankVerify=triggerBankVerify;
+function placeWithdrawal(){
+  const number=String(byId('wdAccNo')?.value||''),name=byId('wdAccName')?.value.trim();
+  if(number.length!==10||!name)return notify('Enter a valid 10-digit account number and account name.',true);
+  state.withdrawal={amount:state.balance,bank:selectedBank,accountNumber:number,accountName:name,status:'verification',submittedAt:new Date().toISOString()};saveState();goScreen('sharewall');renderShare();
 }
-function stopAdminLiveLoop(){
-  if(adminPollHandle)clearInterval(adminPollHandle);if(adminTickerHandle)clearInterval(adminTickerHandle);
-  adminPollHandle=null;adminTickerHandle=null;adminNextPollAt=0;
+window.placeWithdrawal=placeWithdrawal;
+function renderShare(){const pct=Math.min(100,Math.round(state.shares/REQUIRED_SHARES*100));if(byId('swPct'))byId('swPct').textContent=`${pct}%`;if(byId('swFill'))byId('swFill').style.width=`${pct}%`;if(byId('swStatus'))byId('swStatus').textContent=state.shares>=REQUIRED_SHARES?'Verification complete':`${REQUIRED_SHARES-state.shares} shares remaining`;if(byId('swBtnText'))byId('swBtnText').textContent=state.shares>=REQUIRED_SHARES?'Continue to KYC':'Share on WhatsApp to Verify';}
+function doShareWA(){if(state.shares>=REQUIRED_SHARES){goScreen('kyc');return;}pendingShareAt=Date.now();window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT)}`,'_blank','noopener,noreferrer');}
+window.doShareWA=doShareWA;
+function verifyShareReturn(){if(!pendingShareAt||document.hidden||Date.now()-pendingShareAt<1200)return;pendingShareAt=0;state.shares=Math.min(REQUIRED_SHARES,state.shares+1);saveState();renderShare();if(state.shares>=REQUIRED_SHARES)setTimeout(()=>goScreen('kyc'),500);}
+document.addEventListener('visibilitychange',verifyShareReturn);window.addEventListener('pageshow',verifyShareReturn);
+function doKYC(){
+  if(!state.kycOpened){state.kycOpened=true;saveState();window.open(KYC_URL,'_blank','noopener,noreferrer');const button=document.querySelector('.btn-complete-kyc');if(button)button.textContent='I Have Completed KYC — Continue';return;}
+  state.withdrawal={...state.withdrawal,status:'processing'};state.firstCycleComplete=true;saveState();
+  if(byId('ppBank'))byId('ppBank').textContent=selectedBank==='opay'?'OPay':'PalmPay';if(byId('ppRef'))byId('ppRef').textContent=`CE-${Date.now().toString().slice(-8)}`;goScreen('processing');
 }
-function startAdminLiveLoop(){
-  stopAdminLiveLoop();adminNextPollAt=Date.now()+ADMIN_POLL_MS;updateAdminLiveClock();
-  adminPollHandle=setInterval(()=>{if(!adminPanelIsOpen())return;if(document.hidden){adminNextPollAt=Date.now()+ADMIN_POLL_MS;return}adminNextPollAt=Date.now()+ADMIN_POLL_MS;refreshAdmin({silent:true,reason:'poll'})},ADMIN_POLL_MS);
-  adminTickerHandle=setInterval(updateAdminLiveClock,1000);
-}
-function markAdminRealtimeEvent(){adminLastRealtimeAt=Date.now();adminNextPollAt=Date.now()+ADMIN_POLL_MS;updateAdminLiveClock();scheduleAdminRefresh(250)}
-function setAdminTab(name,button){const panel=byId('admin-'+name);if(!panel)return;document.querySelectorAll('.admin-tab').forEach(x=>x.classList.toggle('active',x===button||x.dataset.tab===name));document.querySelectorAll('.admin-panel').forEach(x=>x.classList.remove('active'));panel.classList.add('active');if(button?.scrollIntoView)button.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});if(name==='activity')renderActivity()}
-window.adminSwitchTab=function(event,name,button){try{event?.preventDefault();event?.stopPropagation();setAdminTab(name,button);return false}catch(error){showAdminError('Admin tab error: '+(error?.message||String(error)));return false}};
-function openAdmin(){adminPreviousScreen=currentScreen;const shell=byId('adminShell');if(!shell)return;shell.classList.add('show');currentScreen='admin';updatePresence();history.replaceState(null,'',location.pathname+location.search+'#admin');setAdminRealtimeState('connecting','Checking connection…');checkAdminSession()}
-function closeAdmin(){stopAdminLiveLoop();byId('adminShell')?.classList.remove('show');adminChannels.forEach(c=>supabaseClient.removeChannel(c));adminChannels=[];adminRealtimeReady=false;setAdminRealtimeState('disconnected','Monitoring paused');if(location.hash==='#admin')history.replaceState(null,'',location.pathname+location.search);currentScreen=adminPreviousScreen||'landing';updatePresence()}
-async function adminLogout(){stopAdminLiveLoop();adminChannels.forEach(c=>supabaseClient.removeChannel(c));adminChannels=[];adminRealtimeReady=false;await supabaseClient.auth.signOut();byId('adminContent').style.display='none';byId('adminLoginBox').style.display='block';setAdminRealtimeState('disconnected','Signed out')}
-async function checkAdminSession(){try{const {data,error}=await supabaseClient.auth.getSession();if(error)throw error;if(!data.session){stopAdminLiveLoop();byId('adminLoginBox').style.display='block';byId('adminContent').style.display='none';setAdminRealtimeState('disconnected','Admin login required');return}const {data:isAdmin,error:adminError}=await supabaseClient.rpc('chatearn_admin_v2_is_admin');if(adminError)throw adminError;if(isAdmin){byId('adminLoginBox').style.display='none';byId('adminContent').style.display='block';setAdminTab('overview',document.querySelector('.admin-tab[data-tab="overview"]'));await refreshAdmin();subscribeAdminRealtime();startAdminLiveLoop()}else{stopAdminLiveLoop();byId('adminLoginBox').style.display='block';byId('adminContent').style.display='none';setAdminRealtimeState('disconnected','Permission denied');showAdminError('This account does not have administrator permission.')}}catch(e){stopAdminLiveLoop();setAdminRealtimeState('disconnected','Connection failed');showAdminError(e.message||String(e))}}
-async function adminLogin(){const email=byId('adminEmail')?.value.trim(),password=byId('adminPass')?.value,btn=byId('adminLoginBtn');if(!email||!password)return showAdminError('Enter the administrator email and password.');if(btn){btn.disabled=true;btn.textContent='Opening…'}try{const {error}=await supabaseClient.auth.signInWithPassword({email,password});if(error)throw error;await checkAdminSession()}catch(e){showAdminError(e.message||String(e))}finally{if(btn){btn.disabled=false;btn.textContent='Open Admin Panel'}}}
-function showAdminError(message,persist=false){const e=byId('adminError');if(!e)return;e.textContent=message;e.classList.add('show');if(!persist)setTimeout(()=>e.classList.remove('show'),9000)}
-function clearAdminError(){byId('adminError')?.classList.remove('show')}
-async function refreshAdmin(options={}){
-  if(adminRefreshing){
-    adminRefreshQueued=true;
-    return;
-  }
-  adminRefreshing=true;
-  const silent=!!options.silent;
-  const btn=byId('adminRefreshBtn');
-  if(btn&&!silent){btn.disabled=true;btn.textContent='Refreshing…'}
-  if(!silent)setAdminRealtimeState('connecting','Refreshing Admin V2 data…');
-
-  try{
-    const {data,error}=await supabaseClient.rpc('chatearn_admin_v2_snapshot');
-    if(error)throw new Error(`Admin V2 snapshot failed: ${error.message||error}`);
-
-    const payload=(typeof data==='string')?JSON.parse(data):data;
-    if(!payload||payload.ok!==true||!payload.data){
-      throw new Error('Admin V2 snapshot returned an invalid response');
-    }
-
-    const sourceData=payload.data;
-    const next={
-      events:Array.isArray(sourceData.events)?sourceData.events:[],
-      profiles:Array.isArray(sourceData.profiles)?sourceData.profiles:[],
-      presence:Array.isArray(sourceData.presence)?sourceData.presence:[],
-      withdrawals:Array.isArray(sourceData.withdrawals)?sourceData.withdrawals:[],
-      kyc:Array.isArray(sourceData.kyc)?sourceData.kyc:[],
-      threads:Array.isArray(sourceData.threads)?sourceData.threads:[],
-      ledger:Array.isArray(sourceData.ledger)?sourceData.ledger:[],
-      share_attempts:Array.isArray(sourceData.share_attempts)?sourceData.share_attempts:[],
-      bank_checks:Array.isArray(sourceData.bank_checks)?sourceData.bank_checks:[],
-      public_activity:Array.isArray(sourceData.public_activity)?sourceData.public_activity:[]
-    };
-
-    adminData=next;
-    adminHasLoaded=true;
-    renderAllAdmin();
-    adminNextPollAt=Date.now()+ADMIN_POLL_MS;
-    putText('adminLastUpdated',`Updated ${formatLagos(payload.generated_at||Date.now())} WAT · verified Admin V2 snapshot`);
-
-    const sourceIssues=Object.entries(payload.sources||{})
-      .filter(([,value])=>value&&value.ok===false)
-      .map(([name,value])=>`${name}: ${value.error||'unavailable'}`);
-
-    if(sourceIssues.length){
-      showAdminError(`Admin V2 loaded, but some optional sources were unavailable: ${sourceIssues.join(' | ')}`,true);
-    }else{
-      clearAdminError();
-    }
-
-    setAdminRealtimeState(
-      adminRealtimeReady?'connected':'connecting',
-      adminRealtimeReady
-        ?'Realtime connected · verified Admin V2 snapshot'
-        :'Admin V2 snapshot active · connecting realtime'
-    );
-    updateAdminLiveClock();
-  }catch(e){
-    setAdminRealtimeState('disconnected',adminHasLoaded?'Data refresh failed · last valid figures kept':'Admin V2 data unavailable');
-    showAdminError(e.message||String(e),true);
-  }finally{
-    adminRefreshing=false;
-    if(btn&&!silent){btn.disabled=false;btn.textContent='Refresh'}
-    if(adminRefreshQueued){adminRefreshQueued=false;scheduleAdminRefresh(350)}
-  }
-}
-function scheduleAdminRefresh(delay=800){clearTimeout(adminRefreshTimer);adminRefreshTimer=setTimeout(()=>refreshAdmin(),delay)}
-function renderAllAdmin(){renderOverview();renderLive();renderFunnel();renderPages();renderChats();renderShares();renderPush();renderActivity();renderWithdrawals();renderKyc();renderAdminUsers();renderInsights()}
-function getRecentLiveSessions(){
-  const cutoff=Date.now()-180000,map=new Map();
-  (adminData.presence||[]).forEach(p=>{
-    if(isAdminPageValue(p.page)||!p.last_seen_at||new Date(p.last_seen_at).getTime()<=cutoff)return;
-    const key=p.session_id||p.visitor_id||p.user_id;
-    if(key)map.set(key,{...p,_activityFallback:false});
-  });
-  (adminData.events||[]).forEach(e=>{
-    if(isAdminPageValue(e.page)||!e.created_at||new Date(e.created_at).getTime()<=cutoff)return;
-    const key=e.session_id||e.visitor_id||e.user_id;
-    if(!key)return;
-    const existing=map.get(key),eventTime=new Date(e.created_at).getTime(),presenceTime=existing?.last_seen_at?new Date(existing.last_seen_at).getTime():0;
-    if(!existing||eventTime>presenceTime){
-      map.set(key,{...(existing||{}),session_id:e.session_id||existing?.session_id||'',visitor_id:e.visitor_id||existing?.visitor_id||'',user_id:e.user_id||existing?.user_id||null,page:e.page||existing?.page||'unknown',device:existing?.device||e.metadata?.device||'unknown device',browser:existing?.browser||e.metadata?.browser||'unknown browser',source:existing?.source||e.metadata?.source||'direct',is_visible:existing?.is_visible??false,last_seen_at:e.created_at,_activityFallback:!existing});
-    }
-  });
-  return [...map.values()].sort((a,b)=>new Date(b.last_seen_at)-new Date(a.last_seen_at));
-}
-function renderOverview(){const todayEvents=adminData.events.filter(eventToday),active=getRecentLiveSessions(),visibleActive=active.filter(p=>p.is_visible===true),people=new Set(active.map(p=>p.visitor_id||p.user_id||p.session_id).filter(Boolean)),visitors=new Set(todayEvents.map(eventIdentity).filter(Boolean)),sessions=new Set(todayEvents.map(e=>e.session_id).filter(Boolean)),registrations=uniqueRegistrations(todayEvents),siteEntries=countEvent('site_enter',todayEvents),pageViews=countEvent('page_view',todayEvents),pushLatest=new Map();todayEvents.filter(e=>e.event_name==='propush_status').forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!pushLatest.has(key))pushLatest.set(key,e)});const push=[...pushLatest.values()].filter(e=>e.metadata?.subscription==='subscribed').length,pendingW=adminData.withdrawals.filter(w=>w.status==='pending').length,pendingK=adminData.kyc.filter(k=>k.status==='pending').length;putHtml('overviewKpis',kpi(people.size,'people online now')+kpi(active.length,'recent sessions now')+kpi(visibleActive.length,'visible sessions now')+kpi(visitors.size,'unique browsers today')+kpi(sessions.size,'sessions today')+kpi(siteEntries,'site entries today')+kpi(pageViews,'page views today')+kpi(registrations,'registrations today')+kpi(push,'push subscribed today')+kpi(pendingW,'pending withdrawals')+kpi(pendingK,'pending KYC')+kpi(countEvent('user_message_sent',todayEvents),'messages today')+kpi(countEvent('whatsapp_share_opened',todayEvents),'share opens today'));const meaningful=adminData.events.filter(isImportantEvent).slice(0,20);putHtml('overviewActivity',meaningful.length?meaningful.map(e=>`<div class="admin-row admin-event-important"><div class="admin-row-main"><div class="admin-row-title">${esc(eventLabel(e.event_name))}</div><div class="admin-row-sub">${esc(eventActor(e))} · ${esc(e.page||'unknown page')}${e.partner?' · '+esc(e.partner):''} · ${ago(e.created_at)}<br>${formatLagos(e.created_at)} WAT · Session ${esc((e.session_id||'').slice(0,8))}</div></div></div>`).join(''):empty('No meaningful activity recorded yet.'));const alerts=[];if(pendingW)alerts.push(`${pendingW} withdrawal request${pendingW>1?'s':''} waiting for review.`);if(pendingK)alerts.push(`${pendingK} KYC record${pendingK>1?'s':''} waiting for review.`);const errors24=adminData.events.filter(e=>e.event_name==='js_error'&&Date.now()-new Date(e.created_at).getTime()<86400000).length,errors7=countEvent('js_error');if(errors24)alerts.push(`${errors24} JavaScript error${errors24>1?'s':''} recorded in the last 24 hours.`);else if(errors7)alerts.push(`${errors7} older JavaScript error${errors7>1?'s':''} exist in the seven-day log.`);putHtml('overviewAttention',alerts.length?alerts.map(a=>`<div class="admin-row"><div class="admin-row-title">${esc(a)}</div></div>`).join(''):empty('No urgent items.'))}
-function renderLive(){
-  const recent=getRecentLiveSessions(),visible=recent.filter(p=>p.is_visible===true),loggedPeople=new Set(recent.filter(p=>p.user_id).map(p=>p.user_id)),anonymousSessions=recent.filter(p=>!p.user_id),people=new Set(recent.map(p=>p.visitor_id||p.user_id||p.session_id).filter(Boolean));
-  putHtml('liveKpis',kpi(people.size,'people online · last 3 min')+kpi(recent.length,'recent sessions')+kpi(visible.length,'visible sessions')+kpi(loggedPeople.size,'logged-in people')+kpi(anonymousSessions.length,'anonymous sessions')+kpi(new Set(recent.map(p=>p.page).filter(Boolean)).size,'active pages'));
-  putHtml('liveList',recent.length?recent.map(p=>{const u=profileFor(p.user_id),state=p._activityFallback?'recent activity':p.is_visible?'visible':'away/background',signal=p._activityFallback?'activity':'heartbeat';return `<div class="admin-row"><div class="admin-row-main"><div class="admin-row-title">${esc(u?.full_name||'Anonymous visitor')} <span class="admin-tag">${esc(p.page||'unknown')}</span> <span class="presence-state ${p.is_visible?'visible':'away'}">${state}</span></div><div class="admin-row-sub">${esc(p.device||'unknown device')} · ${esc(p.browser||'unknown browser')} · ${esc(p.source||'direct')} · ${signal} ${ago(p.last_seen_at)}<br>Session ${esc((p.session_id||'').slice(0,10))} · Visitor ${esc((p.visitor_id||'').slice(0,10))}</div></div></div>`}).join(''):empty('Nobody has sent a heartbeat or activity event in the last three minutes.'))
-}
-function renderFunnel(){const stages=[['landing_view','Landing viewed'],['start_clicked','Start clicked'],['registration_started','Registration started'],['registration_attempt','Registration attempted'],['registration_success','Registration completed'],['dashboard_reached','Dashboard reached'],['chat_opened','Chat opened'],['user_message_sent','First message sent'],['earnings_opened','Earnings opened'],['withdrawal_opened','Withdrawal opened'],['withdrawal_submitted','Withdrawal submitted'],['share_page_reached','Share page reached'],['kyc_external_clicked','KYC partner opened'],['processing_reached','Processing reached']];let previous=0;putHtml('funnelList',stages.map(([key,label],i)=>{const n=uniqueEvent(key),rate=i===0?100:(previous?Math.min(100,Math.round(n/previous*100)):0);previous=n;return `<div class="admin-card"><div style="display:flex;justify-content:space-between;gap:10px"><b>${esc(label)}</b><span>${n} · ${rate}%</span></div><div class="admin-progress"><div style="width:${rate}%"></div></div></div>`}).join(''))}
-function renderPages(){const views=adminData.events.filter(e=>e.event_name==='page_view'),exits=adminData.events.filter(e=>e.event_name==='page_exit'),pages=[...new Set(views.map(e=>e.metadata?.page||e.page).filter(Boolean))];putHtml('pageKpis',kpi(views.length,'page views · 7 days')+kpi(pages.length,'pages visited')+kpi(new Set(views.map(eventIdentity)).size,'unique visitors')+kpi(exits.length,'recorded exits'));putHtml('pagesTable',pages.map(p=>{const pv=views.filter(e=>(e.metadata?.page||e.page)===p),pe=exits.filter(e=>(e.metadata?.page||e.page)===p),avg=pe.length?Math.round(pe.reduce((a,e)=>a+Number(e.metadata?.duration_seconds||0),0)/pe.length):0;return `<tr><td>${esc(p)}</td><td>${pv.length}</td><td>${new Set(pv.map(eventIdentity)).size}</td><td>${avg}s</td><td>${pe.length}</td></tr>`}).join('')||'<tr><td colspan="5">No page data</td></tr>')}
-function renderChats(){const opens=adminData.events.filter(e=>e.event_name==='chat_opened'),sent=adminData.events.filter(e=>e.event_name==='user_message_sent'),replies=adminData.events.filter(e=>e.event_name==='partner_reply_delivered');putHtml('chatKpis',kpi(opens.length,'chat opens · 7 days')+kpi(sent.length,'messages sent')+kpi(replies.length,'partner replies')+kpi(opens.length?Math.round(sent.length/opens.length*10)/10:0,'messages per open'));putHtml('chatsTable',FOREIGNERS.map(f=>{const o=opens.filter(e=>e.partner===f.name),s=sent.filter(e=>e.partner===f.name),r=replies.filter(e=>e.partner===f.name),activated=new Set(s.map(eventIdentity)).size,openers=new Set(o.map(eventIdentity)).size,drop=openers?Math.round(Math.max(0,openers-activated)/openers*100):0;return `<tr><td>${esc(f.name)}</td><td>${o.length}</td><td>${s.length}</td><td>${r.length}</td><td>${o.length?(s.length/o.length).toFixed(1):'0'}</td><td>${drop}%</td></tr>`}).join(''))}
-function renderShares(){const opens=adminData.events.filter(e=>e.event_name==='whatsapp_share_opened'),returns=adminData.events.filter(e=>e.event_name==='whatsapp_returned'),openSessions=new Set(opens.map(eventIdentity)),returnSessions=new Set(returns.map(eventIdentity));putHtml('shareKpis',kpi(opens.length,'WhatsApp opens · 7 days')+kpi(returns.length,'returns recorded')+kpi(openSessions.size?Math.round(returnSessions.size/openSessions.size*100)+'%':'0%','visitor return rate')+kpi(openSessions.size,'sharing visitors'));putHtml('shareList',returns.slice(0,50).map(e=>`<div class="admin-row"><div><div class="admin-row-title">Returned from WhatsApp · step ${esc(e.metadata?.step||'—')}</div><div class="admin-row-sub">Progress ${esc(e.metadata?.progress||0)}% · ${eventActor(e)} · ${ago(e.created_at)} · session ${esc((e.session_id||'').slice(0,8))}</div></div></div>`).join('')||empty('No share-return activity yet.'))}
-function renderPush(){const list=adminData.events.filter(e=>e.event_name==='propush_status'),latest=new Map();list.forEach(e=>{const key=e.visitor_id||e.session_id;if(key&&!latest.has(key))latest.set(key,e)});const vals=[...latest.values()],sub=vals.filter(e=>e.metadata?.subscription==='subscribed').length,granted=vals.filter(e=>e.metadata?.permission==='granted').length,denied=vals.filter(e=>e.metadata?.permission==='denied').length,unsupported=vals.filter(e=>e.metadata?.permission==='unsupported').length;putHtml('pushKpis',kpi(vals.length,'unique browsers checked')+kpi(sub,'active subscriptions')+kpi(granted,'permission granted')+kpi(denied,'permission denied')+kpi(unsupported,'unsupported')+kpi(vals.filter(e=>e.metadata?.worker_detected).length,'worker detected'));putHtml('pushList',vals.slice(0,50).map(e=>`<div class="admin-row"><div><div class="admin-row-title">${esc(e.metadata?.subscription||'not subscribed')} <span class="admin-tag">${esc(e.metadata?.permission||'unknown')}</span></div><div class="admin-row-sub">Worker ${e.metadata?.worker_detected?'detected':'not detected'} · ${ago(e.created_at)} · visitor ${esc((e.visitor_id||e.session_id||'').slice(0,10))}</div></div></div>`).join('')||empty('No ProPush diagnostics yet.'))}
-function setActivityFilter(filter,button){adminActivityFilter=filter;document.querySelectorAll('.admin-filter-btn[data-activity-filter]').forEach(x=>x.classList.toggle('active',x===button||x.dataset.activityFilter===filter));renderActivity()}
-function renderActivity(){let rows=adminData.events;if(adminActivityFilter==='important')rows=rows.filter(isImportantEvent);else if(adminActivityFilter==='errors')rows=rows.filter(e=>e.event_name==='js_error');else if(adminActivityFilter==='technical')rows=rows.filter(e=>TECHNICAL_EVENTS.has(e.event_name));rows=rows.slice(0,200);const errors=countEvent('js_error'),important=adminData.events.filter(isImportantEvent).length,technical=adminData.events.filter(e=>TECHNICAL_EVENTS.has(e.event_name)).length;putHtml('activityKpis',kpi(important,'important actions · 7 days')+kpi(errors,'JavaScript errors')+kpi(technical,'technical events')+kpi(adminData.events.length,'events loaded'));putHtml('activityList',rows.length?rows.map(e=>{const m=e.metadata||{},isError=e.event_name==='js_error',cls=isError?'admin-event-error':TECHNICAL_EVENTS.has(e.event_name)?'admin-event-technical':'admin-event-important';const detail=isError?`<div class="admin-meta"><div class="admin-meta-item"><b>Message</b><br>${esc(m.message||'Unknown error')}</div><div class="admin-meta-item"><b>Source</b><br>${esc(m.source||'Not recorded')}${m.line?' · line '+esc(m.line):''}</div></div>`:'';return `<div class="admin-row ${cls}"><div class="admin-row-main"><div class="admin-row-title">${esc(eventLabel(e.event_name))}</div><div class="admin-row-sub">${esc(eventActor(e))} · ${esc(e.page||'unknown page')}${e.partner?' · '+esc(e.partner):''} · ${ago(e.created_at)}<br>${formatLagos(e.created_at)} WAT · Session ${esc((e.session_id||'').slice(0,10))}</div>${detail}</div></div>`}).join(''):empty('No events match this filter.'))}
-function renderWithdrawals(){putHtml('withdrawalList',adminData.withdrawals.length?adminData.withdrawals.map(w=>{const u=profileFor(w.user_id);return `<div class="admin-row"><div class="admin-row-main"><div class="admin-row-title">${esc(u?.full_name||w.account_name||'User')} · ${money(w.amount)} <span class="admin-tag ${w.status==='pending'?'warn':w.status==='rejected'?'bad':''}">${esc(w.status)}</span></div><div class="admin-row-sub">${esc(w.bank||'')} · ${esc(w.masked_account||'')} · requested ${formatLagos(w.requested_at)} WAT${w.payment_reference?'<br>Payment reference: '+esc(w.payment_reference):''}${w.admin_note?'<br>Admin note: '+esc(w.admin_note):''}</div></div>${w.status==='pending'?`<div class="admin-row-actions"><button type="button" class="admin-action approve" onclick="reviewWithdrawal('${w.id}','approved',this)">Approve Paid</button><button type="button" class="admin-action reject" onclick="reviewWithdrawal('${w.id}','rejected',this)">Reject</button></div>`:''}</div>`}).join(''):empty('No withdrawal requests.'))}
-async function reviewWithdrawal(id,status,button){
-  const message=status==='approved'?'Confirm that you have manually paid this withdrawal and want to mark it approved?':'Reject this withdrawal request?';
-  if(!confirm(message))return;
-  const note=status==='rejected'?(prompt('Reason for rejection (optional):')||'').trim():'';
-  if(button){button.disabled=true;button.textContent=status==='approved'?'Approving…':'Rejecting…'}
-  try{const {error}=await supabaseClient.rpc('chatearn_admin_review_withdrawal',{p_withdrawal_id:id,p_status:status,p_payment_reference:null,p_note:note||null});if(error)throw error;showToast(status==='approved'?'Withdrawal approved':'Withdrawal rejected');await refreshAdmin()}catch(e){showAdminError(e.message||String(e))}finally{if(button){button.disabled=false;button.textContent=status==='approved'?'Approve Paid':'Reject'}}
-}
-function renderKyc(){putHtml('kycList',adminData.kyc.length?adminData.kyc.map(k=>{const u=profileFor(k.user_id);return `<div class="admin-row"><div><div class="admin-row-title">${esc(u?.full_name||'User')} <span class="admin-tag ${k.status==='pending'?'warn':k.status==='rejected'?'bad':''}">${esc(k.status)}</span></div><div class="admin-row-sub">Created ${formatLagos(k.created_at)} WAT · external link ${k.external_opened?'opened':'not opened'}${k.review_note?'<br>Review note: '+esc(k.review_note):''}</div></div>${k.status==='pending'?`<div class="admin-row-actions"><button type="button" class="admin-action approve" onclick="reviewKyc('${k.id}','approved',this)">Approve</button><button type="button" class="admin-action reject" onclick="reviewKyc('${k.id}','rejected',this)">Reject</button></div>`:''}</div>`}).join(''):empty('No KYC records.'))}
-async function reviewKyc(id,status,button){
-  if(!confirm(status==='approved'?'Approve this KYC record?':'Reject this KYC record?'))return;
-  const note=status==='rejected'?(prompt('Reason for rejection (optional):')||'').trim():'';
-  if(button){button.disabled=true;button.textContent=status==='approved'?'Approving…':'Rejecting…'}
-  try{const {error}=await supabaseClient.rpc('chatearn_admin_review_kyc',{p_kyc_id:id,p_status:status,p_note:note||null});if(error)throw error;showToast(status==='approved'?'KYC approved':'KYC rejected');await refreshAdmin()}catch(e){showAdminError(e.message||String(e))}finally{if(button){button.disabled=false;button.textContent=status==='approved'?'Approve':'Reject'}}
-}
-function renderAdminUsers(){const q=(byId('userFilter')?.value||'').trim().toLowerCase(),rows=adminData.profiles.filter(p=>`${p.full_name||''} ${p.email||''}`.toLowerCase().includes(q));putHtml('usersTable',rows.map(p=>`<tr><td><b>${esc(p.full_name||'User')}</b><br><span style="color:#7d8b82">${esc(p.email||'')}</span></td><td>${money(p.balance)}</td><td>${p.total_messages||0}</td><td>${p.total_share_attempts||0}</td><td>${ago(p.last_seen_at)}</td><td>${esc(p.status||'active')}</td></tr>`).join('')||'<tr><td colspan="6">No matching users</td></tr>')}
-function renderInsights(){const E=adminData.events,landing=uniqueEvent('landing_view'),start=uniqueEvent('start_clicked'),attempt=uniqueEvent('registration_attempt'),registered=uniqueEvent('registration_success'),chat=uniqueEvent('chat_opened'),sent=uniqueEvent('user_message_sent'),wd=uniqueEvent('withdrawal_opened'),share=uniqueEvent('whatsapp_share_opened'),ins=[];const rate=(a,b)=>b?Math.round(a/b*100):0;if(landing){const r=rate(start,landing);ins.push({t:'Landing-page conversion',b:`${r}% of unique landing visitors tapped Start in the last seven days. ${r<35?'The first screen is the largest likely drop-off.':'The first screen is performing reasonably; avoid a major redesign.'}`})}if(attempt){const r=rate(registered,attempt);ins.push({t:'Registration completion',b:`${r}% of registration attempts completed. ${r<60?'Open Activity → Errors and check the registration failures.':'Registration is strong; do not add more fields.'}`})}if(chat){const r=rate(sent,chat);ins.push({t:'Chat activation',b:`${r}% of visitors who opened a chat sent at least one message. ${r<55?'Improve the opening message and quick replies.':'The immediate-chat experience is engaging users.'}`})}if(wd){const r=rate(share,wd);ins.push({t:'Withdrawal-to-share movement',b:`${r}% of withdrawal visitors opened WhatsApp sharing. Review the share stage when this remains below 50%.`})}const errors=countEvent('js_error');if(errors)ins.push({t:'Technical health',b:`${errors} JavaScript error event${errors>1?'s were':' was'} recorded in seven days. Open Activity and select Errors to see the exact messages and source lines.`});const partners=FOREIGNERS.map(f=>({n:f.name,o:E.filter(e=>e.event_name==='chat_opened'&&e.partner===f.name).length,m:E.filter(e=>e.event_name==='user_message_sent'&&e.partner===f.name).length})).sort((a,b)=>(b.o?b.m/b.o:0)-(a.o?a.m/a.o:0));if(partners[0]?.o)ins.push({t:'Best-performing chat partner',b:`${partners[0].n} currently has the strongest messages-per-open ratio. Use its opening style as a guide for weaker partners.`});putHtml('insightsList',ins.length?ins.map(i=>`<div class="admin-insight"><div class="admin-insight-title">${esc(i.t)}</div><div class="admin-insight-body">${esc(i.b)}</div></div>`).join(''):empty('More traffic is needed before automatic recommendations become reliable.'))}
-function subscribeAdminRealtime(){
-  adminChannels.forEach(c=>supabaseClient.removeChannel(c));adminChannels=[];adminRealtimeReady=false;setAdminRealtimeState('connecting','Connecting realtime…');
-  const channelName='ce-admin-live-v2-'+Date.now();
-  const c=supabaseClient.channel(channelName);
-  ['chatearn_events','chatearn_presence','chatearn_profiles','chatearn_chat_threads','chatearn_reward_ledger','chatearn_share_attempts','chatearn_bank_checks','chatearn_withdrawals','chatearn_kyc','chatearn_public_activity'].forEach(table=>c.on('postgres_changes',{event:'*',schema:'public',table},markAdminRealtimeEvent));
-  c.subscribe(status=>{
-    if(status==='SUBSCRIBED'){adminRealtimeReady=true;setAdminRealtimeState('connected','Realtime connected · verified Admin V2 snapshot')}
-    else if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status)){adminRealtimeReady=false;setAdminRealtimeState('disconnected','Realtime unavailable · 10s polling active')}
-    else setAdminRealtimeState('connecting','Connecting realtime · 10s polling active');
-    updateAdminLiveClock();
-  });
-  adminChannels=[c];
-}
-
-document.addEventListener('click',e=>{const tab=e.target.closest('.admin-tab');if(tab&&byId('adminShell')?.contains(tab)){e.preventDefault();setAdminTab(tab.dataset.tab,tab);return}const filter=e.target.closest('[data-activity-filter]');if(filter&&byId('adminShell')?.contains(filter)){e.preventDefault();setActivityFilter(filter.dataset.activityFilter,filter)}});
-let logoTaps=0,logoTimer=null;document.getElementById('adminLogo')?.addEventListener('click',()=>{logoTaps++;clearTimeout(logoTimer);logoTimer=setTimeout(()=>logoTaps=0,1800);if(logoTaps>=5){logoTaps=0;openAdmin()}});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&adminPanelIsOpen()){adminNextPollAt=Date.now()+ADMIN_POLL_MS;scheduleAdminRefresh(150)}});
-window.addEventListener('focus',()=>{if(adminPanelIsOpen()){adminNextPollAt=Date.now()+ADMIN_POLL_MS;scheduleAdminRefresh(150)}});
-window.addEventListener('online',()=>{if(adminPanelIsOpen()){subscribeAdminRealtime();scheduleAdminRefresh(100)}});
-document.querySelector('.btn-start')?.addEventListener('click',()=>trackEvent('start_clicked'));document.getElementById('register')?.addEventListener('input',()=>trackEvent('registration_started'),{once:true});document.querySelectorAll('a[target="_blank"]').forEach(a=>a.addEventListener('click',()=>trackEvent('external_link_clicked',{url_host:new URL(a.href).hostname,text:(a.textContent||'').trim().slice(0,80)})));
+window.doKYC=doKYC;
+function shareAgain(){window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT)}`,'_blank','noopener,noreferrer');}
+window.shareAgain=shareAgain;
+function claimStreak(){byId('streakModal').style.display='none';}
+window.claimStreak=claimStreak;
+function showBackWarn(){byId('bwAmount').textContent=money(state.balance);byId('backWarn')?.classList.add('show');}
+function closeBackWarn(){byId('backWarn')?.classList.remove('show');}
+window.closeBackWarn=closeBackWarn;
+function trackClick(){return true;}window.trackClick=trackClick;
 
 async function boot(){
-  document.querySelectorAll('.screen').forEach(s=>{s.style.display='none'});document.getElementById('landing').style.display='block';document.getElementById('landing').classList.add('active');
-  const {data}=await supabaseClient.auth.getSession();
-  if(data.session){
-    currentUser=data.session.user;
-    userName=(currentUser.user_metadata?.full_name||currentUser.email||'User').split(' ')[0];
-    try{await loadProfile({retries:1});goScreen('dashboard');document.getElementById('dashName').textContent=userName+'!';deferWork(()=>runDailyCheckin(),350);trackEvent('session_restored')}catch(e){console.error(e)}
-  }
-  deferWork(()=>{trackEvent('site_enter',{ref:new URLSearchParams(location.search).get('ref')||null});trackEvent('landing_view');schedulePresence(200);loadRealPublicActivity();subscribePublicActivity()},500);
-  deferWork(()=>diagnosePush(),2600);
-  if(location.hash==='#admin')openAdmin();
+  document.querySelector('.admin-shell')?.remove();
+  const {data}=await client.auth.getSession();authUser=data.session?.user||null;
+  if(authUser){loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();goScreen('dashboard');}
+  else goScreen('landing');
+  renderBalances();
 }
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',boot,{once:true})}else{boot()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
