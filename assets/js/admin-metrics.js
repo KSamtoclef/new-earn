@@ -20,7 +20,7 @@
   async function render() {
     const root = document.getElementById('offerManager');
     if (!root || root.dataset.metricsReady === '1') return;
-    const admin = await client.rpc('chatearn_v3_admin_is_admin');
+    const admin = await client.rpc('chatearn_admin_is_admin');
     if (admin.error || admin.data !== true) return;
     root.dataset.metricsReady = '1';
     const box = document.createElement('div');

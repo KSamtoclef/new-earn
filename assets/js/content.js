@@ -19,7 +19,7 @@
   }
 
   async function readOffer() {
-    const { data, error } = await client.rpc('chatearn_v4_get_unique_offer', {
+    const { data, error } = await client.rpc('chatearn_get_sponsored_offer', {
       p_placement: 'chat_native',
       p_visitor_id: visitorId(),
       p_session_id: sessionId()
@@ -50,7 +50,7 @@
 
   async function openOffer(offer) {
     window.open(offer.url, '_blank', 'noopener,noreferrer');
-    await client.rpc('chatearn_v3_track_offer_event', {
+    await client.rpc('chatearn_track_sponsored_event', {
       p_offer_key: offer.offer_key,
       p_event_type: 'open',
       p_visitor_id: visitorId(),

@@ -12,7 +12,8 @@ const requiredFiles = [
   'assets/js/content.js',
   'assets/js/admin.js',
   'assets/js/stabilization.js',
-  'assets/js/admin-metrics.js'
+  'assets/js/admin-metrics.js',
+  'database/migrations/20260720_canonical_rpc_names.sql'
 ];
 
 const failures = [];
@@ -44,6 +45,7 @@ const content = read('assets/js/content.js');
 const admin = read('assets/js/admin.js');
 const stabilization = read('assets/js/stabilization.js');
 const adminMetrics = read('assets/js/admin-metrics.js');
+const migration = read('database/migrations/20260720_canonical_rpc_names.sql');
 
 expect(index.includes('./assets/js/config.js') && index.includes('./assets/js/app.js'), 'index loads canonical config and app entrypoints');
 expect(!config.includes('chat.js'), 'config does not load chat directly');
@@ -58,7 +60,8 @@ const allActive = [config, app, auth, chat, rewards, withdrawal, content, admin,
 for (const legacy of ['chatearn-v3.js','chatearn-v4-returning.js','chatearn-v4-2.js','chatearn-module7-admin.js','dtjxcgzpwemdgdeinkcl']) {
   expect(!allActive.includes(legacy), `no active reference to ${legacy}`);
 }
-expect(config.includes('cqnovqvmxwmfngupgtov'), 'canonical Supabase project is configured');
+expect(!/chatearn_v\d+_/i.test(allActive), 'active frontend contains no versioned RPC names');
+expect(config.includes('cqnovqvmxwmfngupgtov'), 'the c-prefixed canonical Supabase project is configured');
 
 for (const rpc of [
   'chatearn_send_message',
@@ -66,14 +69,30 @@ for (const rpc of [
   'chatearn_record_share_attempt',
   'chatearn_create_kyc_request',
   'chatearn_get_chat_task_config',
+  'chatearn_get_sponsored_offer',
+  'chatearn_track_sponsored_event',
+  'chatearn_admin_is_admin',
+  'chatearn_admin_save_offer',
+  'chatearn_admin_save_task',
+  'chatearn_admin_get_queue',
+  'chatearn_admin_review_records'
+]) {
+  expect(allActive.includes(rpc), `required canonical RPC ${rpc} is referenced`);
+}
+
+for (const oldName of [
+  'chatearn_v3_admin_is_admin',
   'chatearn_v4_get_unique_offer',
   'chatearn_v3_track_offer_event',
-  'chatearn_v3_admin_is_admin',
   'chatearn_v6_admin_save_offer',
-  'chatearn_v6_admin_save_task'
+  'chatearn_v6_admin_save_task',
+  'chatearn_v6_admin_queue_impl',
+  'chatearn_v6_admin_bulk_review_impl'
 ]) {
-  expect(allActive.includes(rpc), `required RPC ${rpc} is referenced`);
+  expect(migration.includes(oldName), `migration renames ${oldName}`);
 }
+expect(migration.includes('pg_get_function_identity_arguments'), 'migration discovers exact PostgreSQL function signatures safely');
+expect(migration.includes('alter function public.%I(%s) rename to %I'), 'migration performs real renames instead of creating aliases');
 
 for (const id of ['landing','register','login','loading','dashboard','toast']) expect(index.includes(`id="${id}"`), `index contains #${id}`);
 for (const id of ['chat','messages','composer']) expect(chat.includes(`id="${id}"`), `chat builds #${id}`);
