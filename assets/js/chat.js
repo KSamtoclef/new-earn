@@ -1,113 +1,217 @@
 (() => {
   'use strict';
-  if (window.__CHAT_EARN_CLEAN_CHAT__) return;
-  window.__CHAT_EARN_CLEAN_CHAT__ = true;
-  const client = window.ChatEarn?.client;
+  if (window.__CHAT_EARN_FRONTEND_CHAT__) return;
+  window.__CHAT_EARN_FRONTEND_CHAT__ = true;
+
   const partners = [
-    ['alexlab102','Alex','🇺🇸','Hey, how is your day going?'],
-    ['emiliacute','Emilia','🇬🇧','Hi! Tell me something interesting about yourself.'],
-    ['mattjohn','Matt','🇨🇦','Hello! What are you working on today?'],
-    ['abi1990','Abi','🇿🇦','Hey there! What do you enjoy doing?'],
-    ['princess77','Princess','🇦🇺','Hi! What is life like where you are?'],
-    ['camilaanders','Camila','🇪🇸','Hello! What would you like to talk about?']
+    {
+      key: 'alexlab102', name: 'Alex', flag: '🇺🇸', rate: 15000,
+      opener: 'Hey, how is your day going?',
+      replies: ['That sounds interesting. What happened next?', 'Nice! Tell me more about that.', 'I understand. How did that make you feel?', 'What do you enjoy most about it?']
+    },
+    {
+      key: 'emiliacute', name: 'Emilia', flag: '🇬🇧', rate: 12000,
+      opener: 'Hi! Tell me something interesting about yourself.',
+      replies: ['That is lovely. What else should I know about you?', 'Interesting! How long have you been doing that?', 'What would you like to achieve next?', 'I would like to hear more.']
+    },
+    {
+      key: 'mattjohn', name: 'Matt', flag: '🇨🇦', rate: 10000,
+      opener: 'Hello! What are you working on today?',
+      replies: ['That sounds productive. What is the goal?', 'How is the progress going so far?', 'What is the most difficult part?', 'Great. What will you do after that?']
+    },
+    {
+      key: 'abi1990', name: 'Abi', flag: '🇿🇦', rate: 15000,
+      opener: 'Hey there! What do you enjoy doing?',
+      replies: ['That sounds fun. Why do you enjoy it?', 'How often do you do that?', 'Who introduced you to it?', 'What else do you enjoy?']
+    },
+    {
+      key: 'princess77', name: 'Princess', flag: '🇦🇺', rate: 8000,
+      opener: 'Hi! What is life like where you are?',
+      replies: ['That is interesting. What is your favourite part?', 'What do people usually do there?', 'I would love to know more about your city.', 'How is the weather there today?']
+    },
+    {
+      key: 'camilaanders', name: 'Camila', flag: '🇪🇸', rate: 10000,
+      opener: 'Hello! What would you like to talk about?',
+      replies: ['Sure, let us talk about that.', 'What is your own opinion about it?', 'That makes sense. Can you explain more?', 'What made you think about that today?']
+    }
   ];
-  let active = null;
+
+  // Edit ads here. mode: "fixed" always uses fixedAdSlot; mode: "random" rotates in chat.
+  const ads = [
+    {
+      id: 'fixed-main', mode: 'fixed', active: true,
+      title: 'Sponsored Opportunity',
+      description: 'Open this sponsored offer in a new tab.',
+      cta: 'Open Now',
+      url: 'https://example.com'
+    },
+    {
+      id: 'random-one', mode: 'random', active: true,
+      title: 'Discover More',
+      description: 'A sponsored recommendation selected for this conversation.',
+      cta: 'View Offer',
+      url: 'https://example.com'
+    }
+  ];
+
+  let activePartner = null;
+  let replyIndex = 0;
   let sending = false;
+  let currentUserId = null;
 
-  const money = n => `₦${Number(n || 0).toLocaleString('en-NG')}`;
-  const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-  const show = id => document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
-  const toast = (text, bad=false) => {
-    const el = document.getElementById('toast');
-    if (!el) return;
-    el.textContent = text;
-    el.className = bad ? 'show error' : 'show';
-    setTimeout(() => { el.className = ''; }, 2800);
-  };
+  const money = value => `₦${Number(value || 0).toLocaleString('en-NG')}`;
+  const keyFor = suffix => `ce_frontend_${currentUserId || 'guest'}_${suffix}`;
+  const readNumber = suffix => Math.max(0, Number(localStorage.getItem(keyFor(suffix)) || 0));
+  const writeNumber = (suffix, value) => localStorage.setItem(keyFor(suffix), String(Math.max(0, Number(value) || 0)));
 
-  function style() {
-    if (document.getElementById('cleanChatStyles')) return;
-    const s = document.createElement('style');
-    s.id = 'cleanChatStyles';
-    s.textContent = `.partner-list{display:grid;gap:10px;margin-top:14px}.partner{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-align:left}.avatar{width:45px;height:45px;border-radius:50%;display:grid;place-items:center;background:var(--card2);font-size:22px}.partner b{display:block}.partner small{color:var(--muted)}#chat{padding-bottom:86px}.chat-head{display:flex;align-items:center;gap:12px;padding:8px 0 14px;border-bottom:1px solid var(--line)}.chat-head .back{margin-right:auto}.chat-head strong{display:block}.chat-head small{color:var(--green2)}.messages{display:flex;flex-direction:column;gap:10px;padding:18px 0;min-height:55vh}.bubble{max-width:82%;padding:11px 13px;border-radius:16px;line-height:1.45;font-size:14px}.bubble.in{background:var(--card2);align-self:flex-start}.bubble.out{background:var(--green);color:#041108;align-self:flex-end}.earn{display:block;margin-top:4px;font-size:10px;font-weight:900}.composer{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:auto;display:flex;gap:8px;padding:10px 14px;background:#08110c;border-top:1px solid var(--line)}.composer input{flex:1}.send{width:52px;border:0;border-radius:14px;background:var(--green);font-weight:900}`;
-    document.head.appendChild(s);
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(screen => screen.classList.toggle('active', screen.id === id));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function build() {
-    if (document.getElementById('chat')) return;
-    const dashboard = document.getElementById('dashboard');
-    const empty = dashboard?.querySelector('.empty-state');
-    if (empty) empty.innerHTML = `<div>💬</div><h3>Choose a chat partner</h3><p>Every successful reply is rewarded by the server.</p><div class="partner-list">${partners.map(p => `<button class="partner" data-partner="${p[0]}"><span class="avatar">${p[2]}</span><span><b>${p[1]}</b><small>Online now</small></span></button>`).join('')}</div>`;
-    document.querySelector('.shell')?.insertAdjacentHTML('beforeend', `<section id="chat" class="screen"><header class="chat-head"><button id="chatBack" class="back">←</button><span class="avatar" id="chatAvatar">🌍</span><div><strong id="chatName">Partner</strong><small>Online</small></div></header><div id="messages" class="messages"></div><form id="composer" class="composer"><input id="chatInput" maxlength="1500" placeholder="Type a message…" autocomplete="off"><button class="send" type="submit">➤</button></form></section>`);
-    document.querySelectorAll('[data-partner]').forEach(b => b.addEventListener('click', () => open(b.dataset.partner)));
-    document.getElementById('chatBack')?.addEventListener('click', () => show('dashboard'));
-    document.getElementById('composer')?.addEventListener('submit', send);
+  function renderAccountState() {
+    document.getElementById('balance').textContent = money(readNumber('balance'));
+    document.getElementById('chatCount').textContent = readNumber('replies').toLocaleString('en-NG');
   }
 
-  function add(text, type, reward=0) {
-    const b = document.createElement('div');
-    b.className = `bubble ${type}`;
-    b.textContent = text;
-    if (reward) b.insertAdjacentHTML('beforeend', `<span class="earn">+${money(reward)}</span>`);
-    document.getElementById('messages').appendChild(b);
-    b.scrollIntoView({behavior:'smooth',block:'end'});
+  function renderPartners() {
+    const list = document.getElementById('partnerList');
+    if (!list) return;
+    list.innerHTML = partners.map(partner => `
+      <button class="partner" type="button" data-partner="${partner.key}">
+        <span class="avatar">${partner.flag}</span>
+        <span class="partner-copy"><b>${partner.name}</b><small>Guided chat partner</small></span>
+        <span class="partner-rate">${money(partner.rate)}/reply</span>
+      </button>
+    `).join('');
+    list.querySelectorAll('[data-partner]').forEach(button => {
+      button.addEventListener('click', () => openChat(button.dataset.partner));
+    });
   }
 
-  function open(key) {
-    active = partners.find(p => p[0] === key) || partners[0];
-    document.getElementById('chatName').textContent = active[1];
-    document.getElementById('chatAvatar').textContent = active[2];
+  function adMarkup(ad) {
+    if (!ad || ad.active === false || !/^https:\/\//i.test(ad.url)) return '';
+    return `<article class="ad-card"><small>SPONSORED</small><h4>${escapeHtml(ad.title)}</h4><p>${escapeHtml(ad.description)}</p><a href="${escapeAttribute(ad.url)}" target="_blank" rel="noopener noreferrer sponsored">${escapeHtml(ad.cta)}</a></article>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+  }
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, '&#96;');
+  }
+
+  function renderFixedAd() {
+    const slot = document.getElementById('fixedAdSlot');
+    if (!slot) return;
+    slot.innerHTML = adMarkup(ads.find(ad => ad.active !== false && ad.mode === 'fixed'));
+  }
+
+  function renderRandomAd() {
+    const slot = document.getElementById('randomAdSlot');
+    if (!slot) return;
+    const pool = ads.filter(ad => ad.active !== false && ad.mode === 'random');
+    const ad = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+    slot.innerHTML = adMarkup(ad);
+  }
+
+  function addMessage(text, type, reward = 0) {
+    const messages = document.getElementById('messages');
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${type}`;
+    bubble.textContent = text;
+    if (reward > 0) {
+      const earn = document.createElement('span');
+      earn.className = 'earn';
+      earn.textContent = `+${money(reward)}`;
+      bubble.appendChild(earn);
+    }
+    messages.appendChild(bubble);
+    bubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  function openChat(key) {
+    activePartner = partners.find(partner => partner.key === key) || partners[0];
+    replyIndex = 0;
+    document.getElementById('chatName').textContent = activePartner.name;
+    document.getElementById('chatAvatar').textContent = activePartner.flag;
+    document.getElementById('chatStatus').textContent = 'Guided chat partner';
+    document.getElementById('chatRate').textContent = `${money(activePartner.rate)}/reply`;
     document.getElementById('messages').innerHTML = '';
-    add(active[3], 'in');
+    addMessage(activePartner.opener, 'in');
+    renderRandomAd();
     show('chat');
     document.getElementById('chatInput').focus();
   }
 
-  async function send(e) {
-    e.preventDefault();
-    if (sending || !active) return;
-    const input = document.getElementById('chatInput');
-    const body = input.value.trim();
-    if (!body) return;
-    sending = true;
-    input.disabled = true;
-    add(body, 'out');
-    input.value = '';
-    try {
-      const {data,error} = await client.rpc('chatearn_send_message', {
-        p_partner_key: active[0], p_body: body,
-        p_client_message_id: uuid(), p_session_id: sessionStorage.getItem('ce_session_id') || uuid()
-      });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
-      const last = [...document.querySelectorAll('.bubble.out')].pop();
-      if (row?.reward) last?.insertAdjacentHTML('beforeend', `<span class="earn">+${money(row.reward)}</span>`);
-      document.getElementById('balance').textContent = money(row?.balance);
-      document.getElementById('chatCount').textContent = Number(row?.total_messages || 0).toLocaleString('en-NG');
-      setTimeout(() => add('Nice! Tell me more about that.', 'in'), 650);
-    } catch (err) {
-      toast(err?.message || 'Message failed to send.', true);
-    } finally {
-      sending = false;
-      input.disabled = false;
-      input.focus();
+  function typingIndicator(showIndicator) {
+    let indicator = document.getElementById('typingIndicator');
+    if (showIndicator && !indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'typingIndicator';
+      indicator.className = 'typing';
+      indicator.textContent = `${activePartner.name} is typing…`;
+      document.getElementById('messages').appendChild(indicator);
+      indicator.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else if (!showIndicator) {
+      indicator?.remove();
     }
   }
 
-  function autoOpen() {
-    const dashboard = document.getElementById('dashboard');
-    if (dashboard?.classList.contains('active') && !sessionStorage.getItem('ce_chat_opened')) {
-      sessionStorage.setItem('ce_chat_opened','1');
-      setTimeout(() => open(partners[Math.floor(Math.random()*partners.length)][0]), 350);
-    }
+  async function sendMessage(event) {
+    event.preventDefault();
+    if (sending || !activePartner || !currentUserId) return;
+
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    sending = true;
+    input.disabled = true;
+    input.value = '';
+    addMessage(message, 'out', activePartner.rate);
+
+    const nextBalance = readNumber('balance') + activePartner.rate;
+    const nextReplies = readNumber('replies') + 1;
+    writeNumber('balance', nextBalance);
+    writeNumber('replies', nextReplies);
+    renderAccountState();
+
+    if (nextReplies % 3 === 0) renderRandomAd();
+
+    typingIndicator(true);
+    await new Promise(resolve => setTimeout(resolve, 700));
+    typingIndicator(false);
+    addMessage(activePartner.replies[replyIndex % activePartner.replies.length], 'in');
+    replyIndex += 1;
+
+    sending = false;
+    input.disabled = false;
+    input.focus();
+  }
+
+  function onUserReady(event) {
+    currentUserId = event.detail?.user?.id || document.body.dataset.userId || null;
+    renderAccountState();
+    renderPartners();
+    renderFixedAd();
   }
 
   function boot() {
-    if (!client || !document.getElementById('dashboard')) return;
-    style(); build(); autoOpen();
-    new MutationObserver(autoOpen).observe(document.getElementById('dashboard'), {attributes:true,attributeFilter:['class']});
+    document.getElementById('chatBack')?.addEventListener('click', () => show('dashboard'));
+    document.getElementById('composer')?.addEventListener('submit', sendMessage);
+    window.addEventListener('chatearn:user-ready', onUserReady);
+
+    if (document.body.dataset.userId) {
+      onUserReady({ detail: { user: { id: document.body.dataset.userId } } });
+    } else {
+      renderPartners();
+      renderFixedAd();
+    }
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true});
-  else boot();
+  window.addEventListener('chatearn:ready', boot, { once: true });
 })();
