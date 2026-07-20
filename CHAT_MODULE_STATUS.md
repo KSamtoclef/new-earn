@@ -1,1 +1,0 @@
-Clean chat module: six partners, automatic chat opening, one server RPC send path, and server-returned balance updates. No withdrawal, tasks, sponsored ads, or admin code.
