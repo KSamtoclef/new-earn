@@ -1,0 +1,125 @@
+name: Optimize active page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/optimize-active-page.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove inactive startup weight
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          html = path.read_text(encoding='utf-8')
+
+          # Remove unused admin and legacy CSS from the active page.
+          for tag in [
+              '<link rel="stylesheet" href="./assets/css/chatearn-v6-admin.css?v=6.1.0">',
+              '<link rel="stylesheet" href="./assets/css/chatearn-v3.css?v=4.0.0">',
+              '<link rel="stylesheet" href="./assets/css/chatearn-v4-returning.css?v=4.1.0">',
+              '<link rel="stylesheet" href="./assets/css/chatearn-v4-2.css?v=4.2.0">',
+              '<script src="./assets/js/clarity.js?v=4.0.0" defer></script>',
+          ]:
+              html = html.replace(tag, '')
+
+          # Remove the hidden admin panel markup completely.
+          html = re.sub(
+              r'\s*<div class="admin-shell" id="adminShell">.*?</div>\s*</div>\s*</div>\s*',
+              '\n',
+              html,
+              flags=re.S,
+          )
+
+          # Remove disabled/legacy/admin scripts. Keep only the active app, ads/auth helper, and journey helper.
+          for src in [
+              './assets/js/chatearn-v3.js?v=4.2.0',
+              './assets/js/chatearn-v4-returning.js?v=4.1.0',
+              './assets/js/chatearn-chat-runtime-integrity.js?v=8.6.0',
+              './assets/js/chatearn-module7-admin.js?v=8.1.0',
+              './assets/js/chatearn-v6-admin.js?v=6.1.5',
+          ]:
+              html = re.sub(r'\s*<script src="' + re.escape(src) + r'" defer></script>', '', html)
+
+          # Remove WebPushr startup block. It can be added later only after user interaction.
+          html = re.sub(
+              r'\s*<!-- start webpushr tracking code -->.*?<!-- end webpushr tracking code -->\s*',
+              '\n',
+              html,
+              flags=re.S | re.I,
+          )
+
+          # Add preconnects and ensure the external Supabase SDK never blocks first paint.
+          html = html.replace(
+              '<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>',
+              '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>\n<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>',
+          )
+
+          # Cache-bust only the active runtime files.
+          html = html.replace('./assets/css/chatearn.css?v=4.0.0', './assets/css/chatearn.css?v=7.0.0')
+          html = html.replace('./assets/js/chatearn-app.js?v=6.0.0', './assets/js/chatearn-app.js?v=7.0.0')
+          html = html.replace('./assets/js/chatearn-v4-2.js?v=4.2.0', './assets/js/chatearn-v4-2.js?v=7.0.0')
+          html = html.replace('./assets/js/chatearn-auth-session-fix.js?v=8.0.4', './assets/js/chatearn-auth-session-fix.js?v=9.0.0')
+
+          path.write_text(html, encoding='utf-8')
+          PY
+
+      - name: Add static host caching rules
+        run: |
+          cat > _headers <<'EOF'
+          /assets/*
+            Cache-Control: public, max-age=31536000, immutable
+          /index.html
+            Cache-Control: public, max-age=0, must-revalidate
+          /
+            Cache-Control: public, max-age=0, must-revalidate
+          EOF
+
+          cat > netlify.toml <<'EOF'
+          [build]
+            publish = "."
+
+          [[headers]]
+            for = "/assets/*"
+            [headers.values]
+              Cache-Control = "public, max-age=31536000, immutable"
+
+          [[headers]]
+            for = "/index.html"
+            [headers.values]
+              Cache-Control = "public, max-age=0, must-revalidate"
+          EOF
+
+          cat > vercel.json <<'EOF'
+          {
+            "headers": [
+              {
+                "source": "/assets/(.*)",
+                "headers": [{"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}]
+              },
+              {
+                "source": "/index.html",
+                "headers": [{"key": "Cache-Control", "value": "public, max-age=0, must-revalidate"}]
+              }
+            ]
+          }
+          EOF
+
+      - name: Commit optimized page
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html _headers netlify.toml vercel.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Remove inactive startup weight and add caching"
+          git push
