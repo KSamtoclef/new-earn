@@ -1,12 +1,12 @@
 (() => {
   'use strict';
   const files = [
-    './assets/js/auth.js?v=1',
-    './assets/js/chat.js?v=1',
-    './assets/js/rewards.js?v=1',
-    './assets/js/withdrawal.js?v=1',
-    './assets/js/content.js?v=1',
-    './assets/js/admin.js?v=1'
+    './assets/js/auth.js?v=2',
+    './assets/js/chat.js?v=2',
+    './assets/js/rewards.js?v=2',
+    './assets/js/withdrawal.js?v=2',
+    './assets/js/content.js?v=2',
+    './assets/js/admin.js?v=2'
   ];
   async function load(src) {
     await new Promise((resolve, reject) => {
@@ -20,6 +20,5 @@
   }
   (async () => {
     for (const src of files) await load(src);
-    if (document.readyState !== 'loading') document.dispatchEvent(new Event('DOMContentLoaded'));
   })().catch(error => console.error('[ChatEarn]', error));
 })();
