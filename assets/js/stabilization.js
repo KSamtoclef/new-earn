@@ -142,7 +142,7 @@
   async function enhanceAdmin() {
     const root = document.getElementById('adminContent');
     if (!root || document.getElementById('offerManager')) return;
-    const allowed = await client.rpc('chatearn_v3_admin_is_admin');
+    const allowed = await client.rpc('chatearn_admin_is_admin');
     if (allowed.error || allowed.data !== true) return;
     const panel = document.createElement('div');
     panel.id = 'offerManager'; panel.className = 'panel';
