@@ -34,7 +34,7 @@
   async function checkAdmin() {
     const { data: session } = await client.auth.getSession();
     if (!session?.session?.user) return false;
-    const { data, error } = await client.rpc('chatearn_v3_admin_is_admin');
+    const { data, error } = await client.rpc('chatearn_admin_is_admin');
     return !error && data === true;
   }
 
@@ -51,7 +51,7 @@
     event.preventDefault();
     const f = new FormData(event.target);
     const creative = { headline:f.get('headline'), description:f.get('description'), cta:f.get('cta'), tag:'SPONSORED' };
-    const { error } = await client.rpc('chatearn_v6_admin_save_offer', {
+    const { error } = await client.rpc('chatearn_admin_save_offer', {
       p_offer_key:f.get('key'), p_name:f.get('name'), p_url:f.get('url'), p_display_order:Number(f.get('order')||10),
       p_audience:'all', p_placements:['chat_native'], p_active:f.get('active')==='on', p_quality_threshold_seconds:30,
       p_max_exposures_per_user:3, p_cooldown_hours:0, p_notes:JSON.stringify(creative)
@@ -64,7 +64,7 @@
     event.preventDefault();
     const f = new FormData(event.target);
     const type = f.get('type');
-    const { error } = await client.rpc('chatearn_v6_admin_save_task', {
+    const { error } = await client.rpc('chatearn_admin_save_task', {
       p_task_key:'chat_task', p_title:f.get('title'), p_subtitle:f.get('subtitle')||'', p_button_text:f.get('button'),
       p_task_type:type, p_required_count:1, p_reward_amount:0, p_min_visit:1, p_display_order:10,
       p_active:f.get('active')==='on', p_cooldown_hours:0, p_max_daily_completions:1,
@@ -76,7 +76,7 @@
   }
 
   async function review(kind, id, status) {
-    const { error } = await client.rpc('chatearn_v6_admin_bulk_review_impl', { p_kind:kind, p_ids:[id], p_status:status, p_note:null });
+    const { error } = await client.rpc('chatearn_admin_review_records', { p_kind:kind, p_ids:[id], p_status:status, p_note:null });
     if (error) return toast(error.message,true);
     toast(`${kind==='kyc'?'KYC':'Withdrawal'} ${status}.`);
     loadQueue(kind);
@@ -92,7 +92,7 @@
     const target = document.getElementById(kind==='withdrawals'?'withdrawalQueue':'kycQueue');
     if (!target) return;
     target.textContent='Loading…';
-    const { data, error } = await client.rpc('chatearn_v6_admin_queue_impl', { p_kind:kind, p_status:null, p_limit:50, p_offset:0 });
+    const { data, error } = await client.rpc('chatearn_admin_get_queue', { p_kind:kind, p_status:null, p_limit:50, p_offset:0 });
     if (error) { target.textContent=error.message; return; }
     const payload=parse(data)||{}; const rows=Array.isArray(payload.rows)?payload.rows:[];
     target.innerHTML=rows.length?rows.map(x=>row(x,kind)).join(''):'<p style="color:var(--muted)">No records.</p>';
