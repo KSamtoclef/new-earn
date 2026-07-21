@@ -1,224 +1,55 @@
-(() => {
-'use strict';
-
-const SUPABASE_URL = 'https://cqnovqvmxwmfngupgtov.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxbm92cXZteHdtZm5ndXBndG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODA0NzQsImV4cCI6MjA5OTg1NjQ3NH0.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs';
-const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'chatearn-auth-v2' }
-});
-
-const SIGNUP_BONUS = 10000;
-const MIN_WITHDRAW = 40000;
-const FIRST_CYCLE_LIMIT = 80000;
-const REQUIRED_SHARES = 5;
-const SITE_LINKS = Object.freeze({
-  primaryAd: '',
-  secondaryAd: '',
-  offerLink: '',
-  kycLink: 'https://jikgykm.com/cl/a9f1535a330a2652'
-});
-window.SITE_LINKS = SITE_LINKS;
-const SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;
-const NAV_KEY = 'chatearn_navigation_v1';
-
-const PARTNERS = [
-  { name:'alexlab102', flag:'🇺🇸', initials:'AL', country:'United States', rate:15000, color:'linear-gradient(135deg,#1565C0,#42A5F5)', messages:["Hey! 👋 I just got matched with you on here. I'm Alex. How is your day going?","Nice! Which part of Nigeria are you chatting from?","That sounds interesting. What do you enjoy most about where you live?","I’ve heard Nigerian music is amazing. What are you listening to lately?","That’s a good choice 😄 What do you do for work or school?","Respect. What do you usually do in your free time?","Would you ever like to visit the United States?","What is one thing people misunderstand about Nigeria?","I’ve enjoyed learning from you today.","Great chatting with you 😊"] },
-  { name:'EmiliaCute', flag:'🇬🇧', initials:'EC', country:'United Kingdom', rate:12000, color:'linear-gradient(135deg,#880E4F,#F06292)', messages:["Hellooo 😊 I just got matched with you! How are you doing today?","Lovely! Where in Nigeria are you?","What is the weather like there today?","London has been rainy lately 😂","I have to ask—what is your favourite Nigerian meal?","That sounds delicious.","What kind of music do you enjoy?","Afrobeats is everywhere here now.","Would you ever visit London?","It was lovely chatting with you 😊"] },
-  { name:'MattJohn', flag:'🇨🇦', initials:'MJ', country:'Canada', rate:10000, color:'linear-gradient(135deg,#1B5E20,#66BB6A)', messages:["Hey there! I’m Matt 👋 How are you?","Which part of Nigeria are you chatting from?","Toronto has a large Nigerian community too.","Do you have friends or family abroad?","What kind of work or study do you do?","That sounds cool.","What do you enjoy doing in your free time?","Afrobeats is everywhere here.","Would you ever want to visit Canada?","Great chatting with you 😊"] },
-  { name:'Abi1990', flag:'🇺🇸', initials:'AB', country:'United States', rate:15000, color:'linear-gradient(135deg,#E65100,#FFA726)', messages:["Hey 😊 How’s your day?","Where in Nigeria are you from?","I’ve heard so much about Nigerian food and music.","What’s the best thing about your city?","Do you prefer staying home or going out?","What music are you listening to lately?","That’s a good choice 😄","What do you do for work or school?","Nigeria sounds full of energy.","I enjoyed this conversation 😊"] },
-  { name:'princess77', flag:'🇩🇪', initials:'PR', country:'Germany', rate:8000, color:'linear-gradient(135deg,#4A148C,#CE93D8)', messages:["Hello 😊 Nice to meet you!","Which state are you from in Nigeria?","My friend talks about Nigeria all the time.","People here really enjoy Afrobeats now.","What is your favourite Nigerian meal?","I need to try that someday.","Do you get much time to relax?","What do you wish visitors understood about Nigeria?","Nigeria is on my travel list.","Thank you for the lovely chat 😊"] },
-  { name:'CamilaAnders', flag:'🇦🇺', initials:'CA', country:'Australia', rate:10000, color:'linear-gradient(135deg,#006064,#4DD0E1)', messages:["G’day!! 😄 Are you really in Nigeria?","That’s so far from me! Which part are you in?","Nigeria is much bigger than people realise.","Australia has very different regions too.","What’s the vibe where you are?","Are you more of a city person?","Do you enjoy road trips?","Nigeria must have beautiful scenery.","Afrobeats is huge here now 🔥","Great talking with you 😄"] }
+(()=>{'use strict';
+const sb=window.supabase.createClient('https://cqnovqvmxwmfngupgtov.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxbm92cXZteHdtZm5ndXBndG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyODA0NzQsImV4cCI6MjA5OTg1NjQ3NH0.ZamXPTmqVsdHu1pD1EZLxPeSqWemBsj28Y1f-NOCEZs',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'ce-auth-v5'}});
+const BONUS=10000,THRESHOLD=40000,REF_TARGET=8;
+const partners=[
+{name:'alexlab102',initials:'AL',flag:'🇺🇸',country:'United States',rate:15000,msg:["Hey! 👋 I just got matched with you. How is your day going?","Which part of Nigeria are you chatting from?","What music are you listening to lately?","What do you do for work or school?","Great chatting with you 😊"]},
+{name:'EmiliaCute',initials:'EC',flag:'🇬🇧',country:'United Kingdom',rate:12000,msg:["Hellooo 😊 I just got matched with you! How are you doing today?","Where in Nigeria are you?","What is the weather like there today?","What is your favourite Nigerian meal?","It was lovely chatting with you 😊"]},
+{name:'MattJohn',initials:'MJ',flag:'🇨🇦',country:'Canada',rate:10000,msg:["Hey there! I’m Matt 👋 How are you?","Which part of Nigeria are you chatting from?","What kind of work or study do you do?","Would you ever want to visit Canada?","Great chatting with you 😊"]},
+{name:'Abi1990',initials:'AB',flag:'🇺🇸',country:'United States',rate:15000,msg:["Hey 😊 How’s your day?","Where in Nigeria are you from?","What’s the best thing about your city?","What music are you listening to lately?","I enjoyed this conversation 😊"]},
+{name:'princess77',initials:'PR',flag:'🇩🇪',country:'Germany',rate:8000,msg:["Hello 😊 Nice to meet you!","Which state are you from in Nigeria?","What is your favourite Nigerian meal?","Do you get much time to relax?","Thank you for the lovely chat 😊"]},
+{name:'CamilaAnders',initials:'CA',flag:'🇦🇺',country:'Australia',rate:10000,msg:["G’day!! 😄 Are you really in Nigeria?","Which part are you in?","What’s the vibe where you are?","Do you enjoy road trips?","Great talking with you 😄"]}
 ];
-
-let authUser = null;
-let currentPartner = null;
-let busy = false;
-let selectedBank = 'opay';
-let currentScreen = 'landing';
-let state = freshState();
-let pendingShareAt = 0;
-
-function freshState() {
-  return { name:'User', balance:SIGNUP_BONUS, chatEarnings:0, replyCount:0, firstCycleComplete:false, withdrawal:null, shares:0, kycOpened:false, partnerTurns:{}, conversations:{} };
-}
-function storageKey() { return `chatearn_state_${authUser?.id || 'guest'}`; }
-function loadState() {
-  try { state = { ...freshState(), ...JSON.parse(localStorage.getItem(storageKey()) || '{}') }; } catch { state = freshState(); }
-}
-function saveState() { localStorage.setItem(storageKey(), JSON.stringify(state)); renderBalances(); }
-function money(value) { return `₦${Number(value || 0).toLocaleString('en-NG')}`; }
-function byId(id) { return document.getElementById(id); }
-function notify(message, bad=false) {
-  const toast = byId('toast'); if (!toast) return;
-  toast.textContent = message; toast.className = bad ? 'toast show error' : 'toast show';
-  clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.className = 'toast', 3000);
-}
-function navigationKey(){ return `${NAV_KEY}_${authUser?.id || 'guest'}`; }
-function saveNavigation(){
-  if(!authUser) return;
-  localStorage.setItem(navigationKey(), JSON.stringify({screen:currentScreen,partner:currentPartner?.name||null}));
-}
-function goScreen(id) {
-  document.querySelectorAll('.screen').forEach(screen => { screen.classList.remove('active'); screen.style.display='none'; });
-  const target = byId(id); if (!target) return;
-  target.classList.add('active');
-  target.style.display = ['loading','processing'].includes(id) ? 'flex' : 'block';
-  if (['loading','processing'].includes(id)) Object.assign(target.style,{flexDirection:'column',alignItems:'center',justifyContent:'center'});
-  currentScreen = id; saveNavigation(); scrollTo({top:0});
-  if (id === 'dashboard') renderDashboard();
-  if (id === 'earnings') renderEarnings();
-  if (id === 'withdraw') renderWithdraw();
-}
-window.goScreen = goScreen;
-
-function renderBalances() {
-  const pairs = [['dashBalance',money(state.balance)],['earnPageAmount',Number(state.balance).toLocaleString('en-NG')],['chatEarnBreakdown',money(state.chatEarnings)],['totalEarnBreakdown',money(state.balance)],['wdAmount',money(state.balance)],['ppAmount',money(state.balance)]];
-  pairs.forEach(([id,text]) => { const el=byId(id); if(el) el.textContent=text; });
-  const teaser = byId('wdTeaserSub'), button = byId('wdTeaserBtn');
-  if (teaser) teaser.textContent = state.balance >= MIN_WITHDRAW ? `${money(state.balance)} available for withdrawal` : `Minimum: ${money(MIN_WITHDRAW)} — Chat to unlock`;
-  if (button) { button.textContent = state.balance >= MIN_WITHDRAW ? 'Withdraw →' : 'Locked 🔒'; button.disabled = state.balance < MIN_WITHDRAW; }
-}
-function renderDashboard() {
-  if (byId('dashName')) byId('dashName').textContent = `Welcome, ${String(state.name||'User').split(' ')[0]}!`;
-  renderBalances();
-}
-function renderEarnings() { renderBalances(); }
-function renderWithdraw() { renderBalances(); }
-
-function openLogin() { byId('loginModal')?.classList.add('show'); }
-function closeLogin() { byId('loginModal')?.classList.remove('show'); }
-window.openLogin=openLogin; window.closeLogin=closeLogin;
-
-async function doRegister() {
-  const name=byId('regName')?.value.trim(), email=byId('regEmail')?.value.trim(), password=byId('regPass')?.value||'';
-  const errorBox=byId('regError');
-  if (!name || !email || password.length < 6) return notify('Complete all fields correctly.',true);
-  const button=byId('regSubmitBtn'); if(button){button.disabled=true;button.textContent='Creating account…';}
-  try {
-    const {data,error}=await client.auth.signUp({email,password,options:{data:{full_name:name}}});
-    if(error) throw error;
-    let session=data.session;
-    if(!session){const login=await client.auth.signInWithPassword({email,password});if(login.error)throw login.error;session=login.data.session;}
-    authUser=session?.user||data.user; if(!authUser) throw new Error('Account created but session could not start.');
-    state=freshState(); state.name=name; saveState();
-    runLoading(true);
-  } catch(error) { if(errorBox) errorBox.textContent=error.message; notify(error.message||'Registration failed.',true); }
-  finally { if(button){button.disabled=false;button.textContent='Create Account & Get ₦10,000 →';} }
-}
-window.doRegister=doRegister;
-
-async function doLogin() {
-  const email=byId('loginEmail')?.value.trim(), password=byId('loginPass')?.value||'', button=byId('loginBtn');
-  if(button){button.disabled=true;button.textContent='Logging in…';}
-  try {
-    const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)throw error;
-    authUser=data.user; loadState(); state.name=state.name||authUser.user_metadata?.full_name||email.split('@')[0]; saveState(); closeLogin(); runLoading(false);
-  } catch(error){const box=byId('loginError');if(box)box.textContent=error.message;notify(error.message||'Login failed.',true);}
-  finally{if(button){button.disabled=false;button.textContent='Log In & Continue →';}}
-}
-window.doLogin=doLogin;
-async function userLogout(){await client.auth.signOut();authUser=null;state=freshState();goScreen('landing');}
-window.userLogout=userLogout;
-
-function runLoading(isNew) {
-  goScreen('loading');
-  const title=byId('ldTitle'),sub=byId('ldSub'),fill=byId('ldFill');
-  if(title)title.textContent=isNew?'Setting Up Your Account':'Welcome Back';
-  if(sub)sub.textContent='Matching you with available conversations...';
-  let progress=0; const timer=setInterval(()=>{progress+=20;if(fill)fill.style.width=`${progress}%`;if(progress>=100){clearInterval(timer);renderDashboard();goScreen('dashboard');setTimeout(()=>openChat(Math.floor(Math.random()*PARTNERS.length)),450);}},260);
-}
-
-function conversation(key){state.conversations[key] ||= [];return state.conversations[key];}
-function addBubble(text,type,reward=0){
-  const body=byId('chatBody'); if(!body)return;
-  const wrap=document.createElement('div');wrap.className=`msg-row ${type==='user'?'mine':''}`;
-  const bubble=document.createElement('div');bubble.className=`msg-bubble ${type==='user'?'msg-mine':'msg-theirs'}`;bubble.textContent=text;
-  if(reward){const earn=document.createElement('div');earn.className='msg-earned';earn.textContent=`+${money(reward)} Earned`;bubble.appendChild(earn);}
-  wrap.appendChild(bubble);body.appendChild(wrap);body.scrollTop=body.scrollHeight;
-}
-function renderConversation() {
-  const body=byId('chatBody'); if(!body||!currentPartner)return; body.innerHTML='';
-  const items=conversation(currentPartner.name);
-  if(!items.length){const first=currentPartner.messages[0];items.push({type:'partner',text:first});saveState();}
-  items.forEach(item=>addBubble(item.text,item.type,item.reward||0));
-  renderQuickReplies(items.at(-1)?.text||'');
-}
-function renderQuickReplies(prompt) {
-  const root=byId('quickReplies');if(!root)return;
-  const lower=String(prompt).toLowerCase();let replies=['That’s interesting 😊','Tell me more','How about you?'];
-  if(lower.includes('how are'))replies=['I’m good, thanks 😊','My day is going well','I’m fine. How about you?'];
-  else if(lower.includes('where')||lower.includes('part of nigeria'))replies=['I’m from Lagos','I’m from Ogun State','I’m in Abuja'];
-  else if(lower.includes('music'))replies=['I enjoy Afrobeats','Burna Boy is one of my favourites','What music do you like?'];
-  else if(lower.includes('food')||lower.includes('meal'))replies=['I love jollof rice','You should try suya','What food do you enjoy?'];
-  root.innerHTML=replies.map(text=>`<button type="button" onclick="useQuickReply(${JSON.stringify(text).replace(/"/g,'&quot;')})">${text}</button>`).join('');
-}
-function useQuickReply(text){if(byId('chatInput'))byId('chatInput').value=text;sendMsg();}
-window.useQuickReply=useQuickReply;
-function openChat(index) {
-  currentPartner=PARTNERS[Number(index)]||PARTNERS[0];
-  byId('chatName').textContent=currentPartner.name;byId('chatAv').textContent=currentPartner.flag;byId('chatEarnBadge').textContent=`+${money(currentPartner.rate)}/reply`;
-  byId('chatStatus').textContent='🟢 Automated chat partner';
-  renderConversation();goScreen('chat');setTimeout(()=>byId('chatInput')?.focus(),150);
-}
-window.openChat=openChat;
-function handleEnter(event){if(event.key==='Enter'){event.preventDefault();sendMsg();}}
-window.handleEnter=handleEnter;
-async function sendMsg() {
-  if(busy||!currentPartner)return;const input=byId('chatInput'),text=input?.value.trim();if(!text)return;
-  if(!state.firstCycleComplete&&state.balance>=FIRST_CYCLE_LIMIT){notify(`You reached your first earning limit of ${money(FIRST_CYCLE_LIMIT)}. Withdraw to continue.`,true);goScreen('earnings');return;}
-  busy=true;input.disabled=true;input.value='';
-  const items=conversation(currentPartner.name);items.push({type:'user',text});addBubble(text,'user');
-  const reward=Math.min(currentPartner.rate,state.firstCycleComplete?currentPartner.rate:Math.max(0,FIRST_CYCLE_LIMIT-state.balance));
-  state.balance+=reward;state.chatEarnings+=reward;state.replyCount+=1;items[items.length-1].reward=reward;saveState();renderConversation();
-  if(state.balance>=FIRST_CYCLE_LIMIT&&!state.firstCycleComplete){notify(`First earning cycle reached ${money(FIRST_CYCLE_LIMIT)}.`);setTimeout(()=>goScreen('earnings'),900);busy=false;input.disabled=false;return;}
-  const turn=(state.partnerTurns[currentPartner.name]||0)+1;state.partnerTurns[currentPartner.name]=turn;saveState();
-  setTimeout(()=>{const reply=currentPartner.messages[Math.min(turn,currentPartner.messages.length-1)];items.push({type:'partner',text:reply});saveState();addBubble(reply,'partner');renderQuickReplies(reply);busy=false;input.disabled=false;input.focus();window.ChatEarnAds?.afterReply?.(state.replyCount,byId('chatBody'));},700);
-}
-window.sendMsg=sendMsg;
-
-function tryWithdraw(){if(state.balance<MIN_WITHDRAW)return notify(`${money(MIN_WITHDRAW-state.balance)} remaining before withdrawal.`,true);goScreen('earnings');}
-window.tryWithdraw=tryWithdraw;
-function selectBank(bank){selectedBank=bank;byId('bankOpay')?.classList.toggle('selected',bank==='opay');byId('bankPalmpay')?.classList.toggle('selected',bank==='palmpay');}
-window.selectBank=selectBank;
-function triggerBankVerify(value){const box=byId('bankVerifyStatus');if(!box)return;if(String(value).length===10){box.style.display='block';box.style.background='rgba(0,200,83,.08)';box.style.color='#69F0AE';box.textContent='✓ Account number format accepted';}else box.style.display='none';}
-window.triggerBankVerify=triggerBankVerify;
-function placeWithdrawal(){
-  const number=String(byId('wdAccNo')?.value||''),name=byId('wdAccName')?.value.trim();
-  if(number.length!==10||!name)return notify('Enter a valid 10-digit account number and account name.',true);
-  state.withdrawal={amount:state.balance,bank:selectedBank,accountNumber:number,accountName:name,status:'verification',submittedAt:new Date().toISOString()};saveState();goScreen('sharewall');renderShare();
-}
-window.placeWithdrawal=placeWithdrawal;
-function renderShare(){const pct=Math.min(100,Math.round(state.shares/REQUIRED_SHARES*100));if(byId('swPct'))byId('swPct').textContent=`${pct}%`;if(byId('swFill'))byId('swFill').style.width=`${pct}%`;if(byId('swStatus'))byId('swStatus').textContent=state.shares>=REQUIRED_SHARES?'Verification complete':`${REQUIRED_SHARES-state.shares} shares remaining`;if(byId('swBtnText'))byId('swBtnText').textContent=state.shares>=REQUIRED_SHARES?'Continue to KYC':'Share on WhatsApp to Verify';}
-function doShareWA(){if(state.shares>=REQUIRED_SHARES){goScreen('kyc');return;}pendingShareAt=Date.now();window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT)}`,'_blank','noopener,noreferrer');}
-window.doShareWA=doShareWA;
-function verifyShareReturn(){if(!pendingShareAt||document.hidden||Date.now()-pendingShareAt<1200)return;pendingShareAt=0;state.shares=Math.min(REQUIRED_SHARES,state.shares+1);saveState();renderShare();if(state.shares>=REQUIRED_SHARES)setTimeout(()=>goScreen('kyc'),500);}
-document.addEventListener('visibilitychange',verifyShareReturn);window.addEventListener('pageshow',verifyShareReturn);
-function doKYC(){
-  if(!state.kycOpened){state.kycOpened=true;saveState();window.open(SITE_LINKS.kycLink,'_blank','noopener,noreferrer');const button=document.querySelector('.btn-complete-kyc');if(button)button.textContent='I Have Completed KYC — Continue';return;}
-  state.withdrawal={...state.withdrawal,status:'processing'};state.firstCycleComplete=true;saveState();
-  if(byId('ppBank'))byId('ppBank').textContent=selectedBank==='opay'?'OPay':'PalmPay';if(byId('ppRef'))byId('ppRef').textContent=`CE-${Date.now().toString().slice(-8)}`;goScreen('processing');
-}
-window.doKYC=doKYC;
-function shareAgain(){window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT)}`,'_blank','noopener,noreferrer');}
-window.shareAgain=shareAgain;
-function claimStreak(){byId('streakModal').style.display='none';}
-window.claimStreak=claimStreak;
-function showBackWarn(){byId('bwAmount').textContent=money(state.balance);byId('backWarn')?.classList.add('show');}
-function closeBackWarn(){byId('backWarn')?.classList.remove('show');}
-window.closeBackWarn=closeBackWarn;
-function trackClick(){return true;}window.trackClick=trackClick;
-
-async function boot(){
-  document.querySelector('.admin-shell')?.remove();
-  const {data}=await client.auth.getSession();authUser=data.session?.user||null;
-  if(authUser){
-    loadState();state.name=state.name||authUser.user_metadata?.full_name||authUser.email?.split('@')[0]||'User';saveState();
-    let saved={};try{saved=JSON.parse(localStorage.getItem(navigationKey())||'{}')}catch{}
-    const allowed=new Set(['dashboard','chat','earnings','withdraw','sharewall','kyc','processing']);
-    if(saved.screen==='chat'&&saved.partner){const idx=PARTNERS.findIndex(p=>p.name===saved.partner);openChat(idx>=0?idx:0);}
-    else {const screen=allowed.has(saved.screen)?saved.screen:'dashboard';goScreen(screen);if(screen==='sharewall')renderShare();}
-  } else goScreen('landing');
-  renderBalances();
-}
+let user=null,current=null,currentScreen='landing',busy=false,bank='opay',state=fresh();
+const $=id=>document.getElementById(id),money=n=>`₦${Number(n||0).toLocaleString('en-NG')}`,stamp=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+function fresh(){return{name:'User',bonus:false,balance:0,chatEarnings:0,withdrawal:null,kyc:'not_started',payment:'not_started',lastPartner:null,turns:{},chats:{},refCode:'',refCount:0,unlockShown:false}}
+function sk(){return`ce-state-${user?.id||'guest'}`}function nk(){return`ce-nav-${user?.id||'guest'}`}
+function load(){try{state={...fresh(),...JSON.parse(localStorage.getItem(sk())||'{}')}}catch{state=fresh()}if(!state.refCode)state.refCode=`CE${(user?.id||crypto.randomUUID()).replaceAll('-','').slice(0,8).toUpperCase()}`}
+function save(){localStorage.setItem(sk(),JSON.stringify(state));localStorage.setItem(nk(),JSON.stringify({screen:currentScreen,partner:current?.name||state.lastPartner}));renderMoney()}
+function credit(){if(!state.bonus){state.bonus=true;state.balance+=BONUS;save()}}
+function toast(t,b=false){const e=$('toast');if(!e)return;e.textContent=t;e.className=b?'toast show error':'toast show';clearTimeout(toast.x);toast.x=setTimeout(()=>e.className='toast',3000)}
+function show(id){document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.style.display='none'});const e=$(id);if(!e)return;e.classList.add('active');e.style.display=['loading','processing'].includes(id)?'flex':'block';currentScreen=id;if(id==='dashboard')dashboard();if(id==='earnings')earnings();if(id==='sharewall')share();if(id==='kyc')kyc();if(id==='processing')processing();save();scrollTo(0,0)}window.goScreen=show;
+function renderMoney(){[['dashBalance',money(state.balance)],['earnPageAmount',Number(state.balance).toLocaleString('en-NG')],['chatEarnBreakdown',money(state.chatEarnings)],['totalEarnBreakdown',money(state.balance)],['wdAmount',money(state.balance)],['ppAmount',money(state.withdrawal?.amount||state.balance)]].forEach(([i,t])=>{if($(i))$(i).textContent=t});const s=$('wdTeaserSub'),b=$('wdTeaserBtn');if(s)s.textContent=state.balance>=THRESHOLD?`${money(state.balance)} available for withdrawal`:`Minimum: ${money(THRESHOLD)} — Chat to unlock`;if(b){b.textContent=state.balance>=THRESHOLD?'Withdraw →':'Locked 🔒';b.disabled=state.balance<THRESHOLD}}
+function dashboard(){if($('dashName'))$('dashName').textContent=`Welcome, ${state.name.split(' ')[0]}!`;renderMoney();if(state.withdrawal&&!$('statusCard')){const d=document.createElement('div');d.id='statusCard';d.style.cssText='margin:0 16px 14px;padding:14px;border-radius:14px;background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.22)';d.innerHTML=`<b style="color:#69F0AE">Welcome back 🎉</b><p style="font-size:12px;color:#aebbb3">Your request is ${state.payment.replaceAll('_',' ')}. You can continue chatting while it is reviewed.</p><button onclick="continueLastChat()" style="width:100%;padding:11px;border:0;border-radius:10px;background:#00C853;font-weight:900">CONTINUE LAST CHAT</button>`;document.querySelector('#dashboard .bonus-banner')?.after(d)}}
+function earnings(){renderMoney();const e=document.querySelector('#earnings .earn-breakdown');if(e&&!$('extraEarnings'))e.insertAdjacentHTML('beforeend',`<div id="extraEarnings"><div class="eb-row"><span class="eb-key">Other Earnings</span><span class="eb-val">₦0</span></div><div class="eb-row"><span class="eb-key">Available for Withdrawal</span><span class="eb-val">${money(state.balance)}</span></div></div>`)}
+window.openLogin=()=>$('loginModal')?.classList.add('show');window.closeLogin=()=>$('loginModal')?.classList.remove('show');
+window.doRegister=async()=>{const n=$('regName')?.value.trim(),e=$('regEmail')?.value.trim(),p=$('regPass')?.value||'',b=$('regSubmitBtn');if(!n||!e||p.length<6)return toast('Complete all fields correctly.',true);if(b){b.disabled=true;b.textContent='Creating account…'}try{let r=await sb.auth.signUp({email:e,password:p,options:{data:{full_name:n}}});if(r.error)throw r.error;let session=r.data.session;if(!session){r=await sb.auth.signInWithPassword({email:e,password:p});if(r.error)throw r.error;session=r.data.session}user=session?.user||r.data.user;if(!user)throw Error('Session could not start');load();state.name=n;credit();setup(true)}catch(x){toast(x.message||'Registration failed',true)}finally{if(b){b.disabled=false;b.textContent='Create Account & Get ₦10,000 →'}}};
+window.doLogin=async()=>{const e=$('loginEmail')?.value.trim(),p=$('loginPass')?.value||'',b=$('loginBtn');if(!e||!p)return toast('Enter your email and password.',true);if(b){b.disabled=true;b.textContent='Logging in…'}try{const r=await sb.auth.signInWithPassword({email:e,password:p});if(r.error)throw r.error;user=r.data.user;load();state.name=state.name||user.user_metadata?.full_name||e.split('@')[0];closeLogin();restore()}catch(x){toast(x.message||'Login failed',true)}finally{if(b){b.disabled=false;b.textContent='Log In & Continue →'}}};
+window.userLogout=async()=>{await sb.auth.signOut();user=null;state=fresh();show('landing')};
+function setup(isNew){show('loading');if($('ldTitle'))$('ldTitle').textContent=isNew?'Setting Up Your Account':'Welcome Back';if($('ldSub'))$('ldSub').textContent='Matching you with an available guided chat…';let p=0;clearInterval(setup.t);setup.t=setInterval(()=>{p+=20;if($('ldFill'))$('ldFill').style.width=`${p}%`;if(p>=100){clearInterval(setup.t);openChat(Math.floor(Math.random()*partners.length),true)}},250)}
+function conv(n){state.chats[n]??=[];return state.chats[n]}
+function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+function bubble(m){const b=$('chatBody'),r=document.createElement('div');r.className=`msg-row ${m.type==='user'?'mine':''}`;r.innerHTML=`<div class="msg-bubble ${m.type==='user'?'msg-mine':'msg-theirs'}"><div>${esc(m.text)}</div><div style="font-size:9px;opacity:.65;text-align:right;margin-top:5px">${m.time||stamp()}${m.type==='user'?' ✓✓':''}</div></div>${m.reward?`<div style="font-size:10px;color:#69F0AE;margin-top:4px">+${money(m.reward)} added</div>`:''}`;b.appendChild(r)}
+function typing(){const b=$('chatBody'),r=document.createElement('div');r.className='msg-row';r.id='typingRow';r.innerHTML='<div class="msg-bubble msg-theirs">•••</div>';b.appendChild(r);b.scrollTop=b.scrollHeight;return r}
+function replies(q){q=String(q).toLowerCase();if(q.includes('how are')||q.includes('day'))return['I’m good, thanks 😊','My day is going well','I’m fine. How about you?'];if(q.includes('where')||q.includes('state')||q.includes('part'))return['I’m from Lagos','I’m from Ogun State','I’m in Abuja'];if(q.includes('music'))return['I enjoy Afrobeats','Burna Boy is one of my favourites','What music do you like?'];if(q.includes('food')||q.includes('meal'))return['I love jollof rice','You should try suya','What food do you enjoy?'];return['That’s interesting 😊','Tell me more','How about you?']}
+function quick(q){const r=$('quickReplies');if(!r)return;r.innerHTML='';replies(q).forEach(t=>{const b=document.createElement('button');b.type='button';b.className='quick-reply';b.textContent=t;b.onclick=()=>{if($('chatInput'))$('chatInput').value=t;sendMsg()};r.appendChild(b)})}
+function draw(){const b=$('chatBody');if(!b||!current)return;b.innerHTML='<div class="chat-day">TODAY</div>';conv(current.name).forEach(bubble);quick(conv(current.name).at(-1)?.text||'');unlockCard();b.scrollTop=b.scrollHeight}
+function opening(){if(conv(current.name).length)return draw();draw();const t=typing();setTimeout(()=>{t.remove();conv(current.name).push({type:'partner',text:current.msg[0],time:stamp()});save();draw()},900)}
+function openChat(i,first=false){current=partners[Number(i)]||partners[0];state.lastPartner=current.name;if($('chatName'))$('chatName').textContent=current.name;if($('chatAv'))$('chatAv').textContent=current.initials;if($('chatStatus'))$('chatStatus').textContent=`🟢 Guided chat · ${current.flag} ${current.country}`;if($('chatEarnBadge'))$('chatEarnBadge').textContent=`+${money(current.rate)}/reply`;show('chat');first?opening():draw();setTimeout(()=>$('chatInput')?.focus(),100)}window.openChat=openChat;
+window.handleEnter=e=>{if(e.key==='Enter'){e.preventDefault();sendMsg()}};
+function sendMsg(){if(busy||!current)return;const i=$('chatInput'),t=i?.value.trim();if(!t)return;busy=true;i.disabled=true;i.value='';const a=conv(current.name);a.push({type:'user',text:t,time:stamp(),reward:current.rate});state.balance+=current.rate;state.chatEarnings+=current.rate;save();draw();if(state.balance>=THRESHOLD&&!state.unlockShown){state.unlockShown=true;save();toast('Withdrawal unlocked 🎉 You can withdraw now or keep chatting.')}const turn=(state.turns[current.name]||0)+1;state.turns[current.name]=turn;const ty=typing();setTimeout(()=>{ty.remove();a.push({type:'partner',text:current.msg[Math.min(turn,current.msg.length-1)],time:stamp()});save();draw();busy=false;i.disabled=false;i.focus()},900)}window.sendMsg=sendMsg;
+function unlockCard(){const b=$('chatBody');b?.querySelector('[data-unlock]')?.remove();if(!b||state.balance<THRESHOLD||state.withdrawal)return;const d=document.createElement('div');d.dataset.unlock='1';d.style.cssText='margin:14px 0;padding:15px;border-radius:15px;background:rgba(0,200,83,.12);border:1px solid rgba(0,200,83,.35)';d.innerHTML='<b style="color:#69F0AE">Withdrawal Unlocked 🎉</b><p style="font-size:12px">You can withdraw now or continue chatting.</p><div style="display:flex;gap:8px"><button onclick="goScreen(\\'earnings\\')" style="flex:1;padding:10px;border:0;border-radius:10px;background:#00C853;font-weight:900">VIEW MY EARNINGS</button><button onclick="document.getElementById(\\'chatInput\\')?.focus()" style="flex:1;padding:10px;border:1px solid #39413b;border-radius:10px;background:#1d221e;color:#fff;font-weight:900">KEEP CHATTING</button></div>';b.appendChild(d)}
+window.tryWithdraw=()=>state.balance<THRESHOLD?toast(`${money(THRESHOLD-state.balance)} remaining before withdrawal.`,true):show('earnings');
+window.selectBank=x=>{bank=x;$('bankOpay')?.classList.toggle('selected',x==='opay');$('bankPalmpay')?.classList.toggle('selected',x==='palmpay')};
+window.triggerBankVerify=v=>{const e=$('bankVerifyStatus');if(e)e.style.display=String(v).length===10?'block':'none'};
+window.placeWithdrawal=()=>{const num=String($('wdAccNo')?.value||''),name=$('wdAccName')?.value.trim();if(num.length!==10||!name)return toast('Enter a valid account number and account name.',true);state.withdrawal={amount:state.balance,bank:bank==='opay'?'OPay':'PalmPay',accountNumber:num,accountName:name,submittedAt:new Date().toISOString()};state.payment='withdrawal_submitted';save();let d=$('withdrawCreated');if(!d){d=document.createElement('div');d.id='withdrawCreated';document.querySelector('#withdraw .wd-body')?.appendChild(d)}d.style.cssText='margin-top:15px;padding:15px;border-radius:12px;background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.25)';d.innerHTML='<b>Withdrawal request created.</b><p style="font-size:12px">Continue when ready.</p><button onclick="goScreen(\\'sharewall\\')" style="width:100%;padding:12px;border:0;border-radius:10px;background:#00C853;font-weight:900">CONTINUE</button>';toast('Withdrawal request created.')};
+function refLink(){return`${location.origin}${location.pathname}?ref=${state.refCode}`}function share(){if($('swHeroTitle'))$('swHeroTitle').textContent='Referral Progress';if($('swHeroSub'))$('swHeroSub').innerHTML=`Share your personal link with <b>${REF_TARGET} people</b>. Confirmed referrals will appear after backend tracking is connected.`;const p=Math.min(100,(state.refCount/REF_TARGET)*100);if($('swPct'))$('swPct').textContent=`${p}%`;if($('swFill'))$('swFill').style.width=`${p}%`;if($('swStatus'))$('swStatus').textContent=`${state.refCount} of ${REF_TARGET} confirmed`;if($('swBtnText'))$('swBtnText').textContent='Share Referral Link on WhatsApp';const b=document.querySelector('#sharewall .sw-body');if(b&&!$('refTools'))b.insertAdjacentHTML('beforeend',`<div id="refTools" style="display:grid;gap:9px;margin-top:12px"><div id="refText" style="padding:12px;border:1px solid #333;border-radius:10px;font-size:11px;word-break:break-all"></div><button onclick="copyReferral()" style="padding:12px;border:1px solid #39413b;border-radius:10px;background:#1e231f;color:#fff;font-weight:900">COPY LINK</button><button onclick="goScreen('kyc')" style="padding:12px;border:0;border-radius:10px;background:#00C853;font-weight:900">CONTINUE TO KYC</button></div>`);if($('refText'))$('refText').textContent=refLink()}
+window.doShareWA=()=>window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`Join me on ChatEarn: ${refLink()}`)}`,'_blank','noopener,noreferrer');window.copyReferral=async()=>{try{await navigator.clipboard.writeText(refLink());toast('Referral link copied.')}catch{toast('Copy failed.',true)}};window.setReferralProgress=n=>{state.refCount=Math.max(0,Math.min(REF_TARGET,Number(n)||0));save();share()};
+function kyc(){const p=document.querySelector('#kyc .kyc-hero p');if(p)p.textContent='Submit your KYC details. Approval is controlled by the backend or admin review.';const b=document.querySelector('.btn-complete-kyc');if(b)b.textContent=state.kyc==='not_started'?'SUBMIT KYC FOR REVIEW →':'KYC SUBMITTED — VIEW STATUS';const s=document.querySelectorAll('#kyc .ks-status');if(s[2])s[2].textContent=`${state.refCount}/${REF_TARGET}`;if(s[3])s[3].textContent=state.kyc.replaceAll('_',' ')}
+window.doKYC=()=>{if(state.kyc==='not_started'){state.kyc='submitted';state.payment='kyc_under_review';save();kyc();toast('KYC submitted for review.')}else show('processing')};
+function processing(){if($('ppBank'))$('ppBank').textContent=state.withdrawal?.bank||'Selected bank';if($('ppRef'))$('ppRef').textContent=`CE-${Date.now().toString().slice(-8)}`;const t=document.querySelector('#processing .pp-title');if(t)t.textContent='Withdrawal Processing';const p=document.querySelector('#processing .pp-sub');if(p)p.innerHTML=`Your <b>${money(state.withdrawal?.amount||state.balance)}</b> request is submitted. KYC status: <b>${state.kyc.replaceAll('_',' ')}</b>.`;if($('ppBankNote'))$('ppBankNote').textContent='Final approval and completion come from the backend or admin review.';const x=document.querySelectorAll('#processing .pt-title');if(x[0])x[0].textContent='Withdrawal Request Submitted ✓';if(x[1])x[1].textContent=`KYC — ${state.kyc.replaceAll('_',' ')}`;if(x[2])x[2].textContent='Payment status — processing';if(!$('returnChat'))document.querySelector('#processing')?.insertAdjacentHTML('beforeend','<div style="width:100%;padding:0 20px;margin-top:12px"><button id="returnChat" onclick="returnToChat()" style="width:100%;padding:15px;border:0;border-radius:12px;background:#00C853;font-weight:900">RETURN TO CHAT & CONTINUE EARNING</button></div>')}
+window.returnToChat=()=>{continueLastChat();toast('You can continue chatting while your request is reviewed.')};window.continueLastChat=()=>{const i=partners.findIndex(p=>p.name===state.lastPartner);i>=0?openChat(i):show('dashboard')};window.shareAgain=window.doShareWA;window.claimStreak=()=>{if($('streakModal'))$('streakModal').style.display='none'};window.closeBackWarn=()=>$('backWarn')?.classList.remove('show');window.trackClick=()=>true;
+function css(){const s=document.createElement('style');s.textContent=`#chat{height:100dvh;overflow:hidden}.chat-header{position:sticky;top:0;z-index:100;padding-top:env(safe-area-inset-top)}.chat-body{height:calc(100dvh - 145px - env(safe-area-inset-bottom));overflow-y:auto;padding:14px 12px 150px!important}.chat-input-wrap{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:auto;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#111511}.msg-row{display:flex;flex-direction:column;align-items:flex-start;margin:8px 0}.msg-row.mine{align-items:flex-end}.msg-bubble{max-width:82%;padding:10px 12px;border-radius:18px;line-height:1.45}.msg-theirs{background:#242824;border-bottom-left-radius:5px}.msg-mine{background:#075e54;border-bottom-right-radius:5px}.chat-day{text-align:center;font-size:10px;color:#7c8880;margin:10px 0}.quick-replies{bottom:78px}`;document.head.appendChild(s);document.documentElement.dataset.build='ChatEarn Flow 2026.07.21-safe'}
+function restore(){let n={};try{n=JSON.parse(localStorage.getItem(nk())||'{}')}catch{};if(n.screen==='chat'&&n.partner){const i=partners.findIndex(p=>p.name===n.partner);openChat(i>=0?i:0)}else if(state.withdrawal&&['sharewall','kyc','processing'].includes(n.screen))show(n.screen);else show('dashboard')}
+async function boot(){css();const r=await sb.auth.getSession();user=r.data.session?.user||null;if(!user)return show('landing');load();state.name=state.name||user.user_metadata?.full_name||user.email?.split('@')[0]||'User';credit();Object.values(state.chats).some(x=>x?.length)?restore():setup(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
