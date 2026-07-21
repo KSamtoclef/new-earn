@@ -210,6 +210,7 @@ function runSetup(isNew){
  runSetup.timer=setInterval(()=>{progress+=20;if($('ldFill'))$('ldFill').style.width=`${progress}%`;if(progress>=100){clearInterval(runSetup.timer);openChat(Math.floor(Math.random()*PARTNERS.length),true)}},250);
 }
 function conversation(name){state.conversations[name]??=[];return state.conversations[name]}
+function lastPartnerMessage(){return conversation(currentPartner.name).filter(m=>m.type==='partner').at(-1)?.text||currentPartner.opening}
 function partnerResponse(text){
  const normalized=text.toLowerCase();
  return currentPartner.branches.find(b=>b.match.some(x=>normalized.includes(x)))||currentPartner.branches.find(b=>!b.match.length)||currentPartner.branches[0];
