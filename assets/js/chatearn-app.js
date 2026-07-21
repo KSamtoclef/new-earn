@@ -16,7 +16,7 @@ const AD_CONFIG={
  halfScreen:[{id:'half_screen_1',title:'Sponsored Reward',description:'Explore this featured opportunity.',buttonText:'VIEW OPPORTUNITY',url:'PASTE_HALF_SCREEN_AD_URL_HERE',active:true,maximumShowsPerSession:1}],
  earnings:[{id:'earnings_ad_1',title:'Earnings Opportunity',description:'Explore today’s sponsored reward.',buttonText:'OPEN OPPORTUNITY',url:'PASTE_EARNINGS_AD_URL_HERE',active:true}]
 };
-window.CHATEARN_CONFIG=Object.freeze({FIRST_WITHDRAWAL_THRESHOLD,REQUIRED_SHARE_ACTIONS,KYC_CONFIG,AD_CONFIG});
+window.CHATEARN_CONFIG=Object.freeze({FIRST_WITHDRAWAL_THRESHOLD,REQUIRED_SHARE_ACTIONS,KYC_CONFIG,AD_CONFIG,contextualCombinations:512});
 
 const PARTNERS=[
 {name:'alexlab102',initials:'AL',flag:'🇺🇸',country:'United States',language:'English',rate:7000,opening:'Hey! 👋 I just got matched with you. How is your day going?',branches:[
@@ -68,6 +68,38 @@ const PARTNERS=[
  {match:[],reply:'What digital skill would you like to improve?',suggestions:['Web development','Design','Digital marketing']}
 ]}
 ];
+
+const PERSONALITY_OPENERS=[
+ 'That makes sense 😊','Interesting — thanks for sharing.','Nice, I understand.','That sounds good.','I like that answer.','Good point.','Thanks for explaining.','I can relate to that.'
+];
+const CONTEXT_LIBRARY=[
+ {keys:['school','student','university','course','study'],questions:['What part of your studies interests you most?','What subject has challenged you recently?','What skill are you building through school?','What would make this school year successful for you?'],suggestions:['I enjoy practical projects','Some courses are challenging','I want to improve my skills','Finishing well is my goal']},
+ {keys:['work','job','business','online'],questions:['What part of your work do you enjoy most?','What are you currently trying to improve?','What kind of opportunity are you looking for?','What keeps you motivated when work gets difficult?'],suggestions:['I enjoy solving problems','I’m building something new','I want more opportunities','Progress keeps me motivated']},
+ {keys:['music','song','artist','afrobeats'],questions:['Which artist have you played most lately?','What kind of song improves your mood?','Do you prefer calm music or energetic music?','What Nigerian song would you recommend?'],suggestions:['I listen to Afrobeats','Gospel lifts my mood','I enjoy energetic songs','I have several favourites']},
+ {keys:['food','meal','rice','suya','jollof','amala','egusi'],questions:['What meal could you eat every week?','Do you prefer cooking or buying food?','What Nigerian meal should a visitor try first?','Is there a food you are learning to prepare?'],suggestions:['Jollof rice is a favourite','I enjoy local meals','Suya is a good choice','I like trying new food']},
+ {keys:['lagos','ogun','abuja','nigeria','city','state'],questions:['What do you enjoy most about where you live?','What would you show a first-time visitor?','Is your area usually calm or busy?','What makes your city feel like home?'],suggestions:['The people are welcoming','There are many opportunities','It is usually lively','The community feels familiar']},
+ {keys:['travel','visit','canada','london','america','australia'],questions:['Which country would you most like to visit?','What would you want to experience there first?','Do you prefer city trips or nature trips?','Who would you like to travel with?'],suggestions:['I would explore the city','I want to experience the culture','Nature trips sound relaxing','I would travel with family']},
+ {keys:['movie','film','series','watch'],questions:['What kind of movies do you enjoy?','Have you watched anything memorable recently?','Do you prefer comedy or action?','Would you rather watch at home or at the cinema?'],suggestions:['I enjoy comedy','Action movies are fun','I watch at home mostly','I like interesting series']},
+ {keys:['weekend','free time','relax','rest'],questions:['What is your ideal way to relax?','How do you usually spend weekends?','What helps you reset after a busy day?','Do you prefer quiet time or going out?'],suggestions:['I listen to music','I spend time with friends','I enjoy quiet time','I catch up on sleep']},
+ {keys:['technology','computer','coding','digital','design'],questions:['Which digital skill interests you most?','What would you like to build with technology?','Do you learn better through videos or practice?','What technology topic are you exploring now?'],suggestions:['Web development interests me','I enjoy design','Practice helps me learn','I want to build useful tools']},
+ {keys:['family','friend','people','community'],questions:['What do you value most in friendship?','Who encourages you when things are difficult?','Do you enjoy large gatherings or small groups?','What makes a community feel supportive?'],suggestions:['Honesty matters to me','My family encourages me','I prefer small groups','People helping each other matters']},
+ {keys:['goal','future','dream','plan'],questions:['What goal are you focused on right now?','What would you like to achieve this year?','What is one small step you can take next?','What kind of future are you working toward?'],suggestions:['I want to grow my skills','I’m focused on school','I want to build a business','Consistency is my next step']},
+ {keys:['money','earn','income','finance'],questions:['What financial goal matters most to you?','Do you prefer saving first or investing in skills?','What would extra income help you achieve?','What money habit are you trying to improve?'],suggestions:['I want to save more','I invest in learning','Extra income would help with school','I’m improving my budgeting']},
+ {keys:['weather','rain','sunny','warm'],questions:['Do you enjoy rainy or sunny days more?','What weather helps you feel productive?','What do you usually do when it rains?','Is the weather different from last week?'],suggestions:['I prefer sunny days','Rain helps me relax','I stay indoors when it rains','It has been warmer lately']},
+ {keys:['sport','football','game','team'],questions:['What sport do you enjoy watching or playing?','Do you support a particular team?','Would you rather play or watch?','What makes a game exciting for you?'],suggestions:['I enjoy football','I like competitive games','I prefer watching','A close match is exciting']},
+ {keys:['good','fine','well','happy'],questions:['What has made your day feel good?','What are you looking forward to today?','Has anything interesting happened recently?','What would make today even better?'],suggestions:['I completed something important','I’m looking forward to resting','My day has been peaceful','Good news would make it better']},
+ {keys:[],questions:['What is something you have been thinking about lately?','What topic could you talk about for hours?','What is one thing you would like to improve?','What has been the best part of your week?'],suggestions:['I’m focused on my goals','I enjoy learning new things','I want to improve my skills','This week has been productive']}
+];
+function contextualResponse(text){
+ const normalized=String(text||'').toLowerCase();
+ const topic=CONTEXT_LIBRARY.find(item=>item.keys.some(key=>normalized.includes(key)))||CONTEXT_LIBRARY.at(-1);
+ const turn=Number(state.partnerTurns[currentPartner?.name]||0);
+ const variant=turn%topic.questions.length;
+ const tone=PERSONALITY_OPENERS[(turn+(currentPartner?.name?.length||0))%PERSONALITY_OPENERS.length];
+ const suggestionStart=(variant+turn)%topic.suggestions.length;
+ const picks=[0,1,2].map(offset=>topic.suggestions[(suggestionStart+offset)%topic.suggestions.length]);
+ return{reply:`${tone} ${topic.questions[variant]}`,suggestions:picks};
+}
 
 let authUser=null,currentPartner=null,currentScreen='landing',busy=false,selectedBank='opay',state=freshState();
 let shareReturnTimer=null;
@@ -134,7 +166,7 @@ function renderBalances(){
  const map={
   dashBalance:money(state.availableBalance),earnPageAmount:Number(state.availableBalance).toLocaleString('en-NG'),
   chatEarnBreakdown:money(state.chatEarnings),totalEarnBreakdown:money(state.lifetimeEarnings),
-  wdAmount:money(state.availableBalance),ppAmount:money(state.withdrawal?.amount||state.amountUnderReview)
+  wdAmount:money(state.withdrawal?.amount||state.availableBalance),ppAmount:money(state.withdrawal?.amount||state.amountUnderReview)
  };
  Object.entries(map).forEach(([id,text])=>{if($(id))$(id).textContent=text});
  const sub=$('wdTeaserSub'),btn=$('wdTeaserBtn');
@@ -142,9 +174,16 @@ function renderBalances(){
  if(btn){btn.textContent=state.availableBalance>=FIRST_WITHDRAWAL_THRESHOLD?'Withdraw →':'Locked 🔒';btn.disabled=state.availableBalance<FIRST_WITHDRAWAL_THRESHOLD}
 }
 
+function syncPartnerCards(){
+ document.querySelectorAll('#foreignerList .foreigner-card').forEach((card,index)=>{
+  const partner=PARTNERS[index];if(!partner)return;
+  const rate=card.querySelector('.fc-earn');if(rate)rate.textContent=`₦${partner.rate/1000}K/reply`;
+ });
+ const badge=document.querySelector('#dashboard .st-badge');if(badge)badge.textContent='Automated partners available';
+}
 function renderDashboard(){
  if($('dashName'))$('dashName').textContent=`Welcome, ${String(state.name||'User').split(' ')[0]}!`;
- renderBalances();
+ renderBalances();syncPartnerCards();
  let card=$('statusCard');
  if(state.withdrawal){
   if(!card){card=document.createElement('div');card.id='statusCard';document.querySelector('#dashboard .bonus-banner')?.after(card)}
@@ -212,11 +251,16 @@ function runSetup(isNew){
 function conversation(name){state.conversations[name]??=[];return state.conversations[name]}
 function lastPartnerMessage(){return conversation(currentPartner.name).filter(m=>m.type==='partner').at(-1)?.text||currentPartner.opening}
 function partnerResponse(text){
- const normalized=text.toLowerCase();
- return currentPartner.branches.find(b=>b.match.some(x=>normalized.includes(x)))||currentPartner.branches.find(b=>!b.match.length)||currentPartner.branches[0];
+ const normalized=String(text||'').toLowerCase();
+ const matched=currentPartner.branches.find(branch=>branch.match.length&&branch.match.some(key=>normalized.includes(key)));
+ return matched||contextualResponse(text);
 }
 function messageBubble(message){
- const body=$('chatBody'),row=document.createElement('div');row.className=`msg-row ${message.type==='user'?'mine':''}`;
+ const body=$('chatBody');
+ if(message.type==='ad'){
+  const ad=AD_CONFIG.inlineChat.find(item=>item.id===message.adId);if(ad)body.appendChild(adCard(ad,'inlineChat'));return;
+ }
+ const row=document.createElement('div');row.className=`msg-row ${message.type==='user'?'mine':''}`;
  row.innerHTML=`<div class="msg-bubble ${message.type==='user'?'msg-mine':'msg-theirs'}"><div>${esc(message.text)}</div><div style="font-size:9px;opacity:.65;text-align:right;margin-top:5px">${message.time||stamp()}${message.type==='user'?' ✓✓':''}</div></div>${message.reward?`<div style="font-size:10px;color:#69F0AE;margin-top:4px">Reply accepted<br>+${money(message.reward)} added to your earnings</div>`:''}`;
  body.appendChild(row);
 }
@@ -297,10 +341,8 @@ window.placeWithdrawal=()=>{
  const amount=state.availableBalance;
  state.withdrawal={id:`WD-${Date.now()}`,amount,bank:selectedBank==='opay'?'OPay':'PalmPay',accountNumber,accountName,submittedAt:nowISO(),status:'requirements_in_progress'};
  state.amountUnderReview=amount;state.paymentStatus='requirements_in_progress';saveState();
- let card=$('withdrawCreated');if(!card){card=document.createElement('div');card.id='withdrawCreated';document.querySelector('#withdraw .wd-body')?.appendChild(card)}
- card.style.cssText='margin-top:15px;padding:15px;border-radius:12px;background:rgba(0,200,83,.08);border:1px solid rgba(0,200,83,.25)';
- card.innerHTML='<b>Withdrawal Request Created</b><p style="font-size:12px">Complete the celebration sharing stage to continue your reward activation journey.</p><button onclick="goScreen(\'sharewall\')" style="width:100%;padding:12px;border:0;border-radius:10px;background:#00C853;font-weight:900">CONTINUE TO SHARING</button>';
- toast('Withdrawal request created.');
+ toast('Withdrawal request created. Continue with the sharing stage.');
+ showScreen('sharewall');
 };
 
 function referralLink(){return`${location.origin}${location.pathname}?ref=${encodeURIComponent(state.referralCode)}`}
@@ -311,10 +353,12 @@ function shareCooldownRemaining(){return Math.max(0,Number(state.sharing.cooldow
 function renderShare(){
  if($('swHeroTitle'))$('swHeroTitle').textContent='Complete Your Sharing Stage';
  if($('swHeroSub'))$('swHeroSub').textContent='Share your ChatEarn invitation through WhatsApp and return to continue.';
+ const waiting=document.querySelector('#sharewall .sw-body > div[style*="255,215,0"]');if(waiting)waiting.innerHTML=`⚡ <strong>Your ${money(state.withdrawal?.amount||state.amountUnderReview)} request is recorded.</strong> Complete the sharing stage to continue.`;
+ const note=document.querySelector('#sharewall .sw-note');if(note)note.textContent='Each action records that the WhatsApp share interface was opened and you returned.';
  const percent=Math.round((state.sharing.count/REQUIRED_SHARE_ACTIONS)*100);
- if($('swPct'))$('swPct').textContent=`${state.sharing.count} of ${REQUIRED_SHARE_ACTIONS}`;
+ if($('swPct'))$('swPct').textContent=`${percent}%`;
  if($('swFill'))$('swFill').style.width=`${percent}%`;
- if($('swStatus'))$('swStatus').textContent=state.sharing.count>=REQUIRED_SHARE_ACTIONS?'Sharing Stage Complete 🎉':`Progress: ${state.sharing.count} of ${REQUIRED_SHARE_ACTIONS}`;
+ if($('swStatus'))$('swStatus').textContent=state.sharing.count>=REQUIRED_SHARE_ACTIONS?'Sharing Stage Complete 🎉':`Progress: ${percent}%`;
  if($('swBtnText'))$('swBtnText').textContent=state.sharing.pending?'Share activity opened — return here':'SHARE ON WHATSAPP';
  const main=$('btnShareWA');if(main){main.disabled=state.sharing.pending||shareCooldownRemaining()>0||state.sharing.count>=REQUIRED_SHARE_ACTIONS}
  let tools=$('shareTools');
@@ -385,20 +429,20 @@ function renderProcessing(){
 window.returnToChat=()=>{continueLastChat();toast('Your withdrawal request is awaiting review. Continue chatting and earning while you wait.')};
 window.continueLastChat=()=>{const index=PARTNERS.findIndex(p=>p.name===state.lastPartner);index>=0?openChat(index):showScreen('dashboard')};
 
-function eligibleAds(group){return(group||[]).filter(ad=>ad.active&&validUrl(ad.url))}
+function eligibleAds(group){return(group||[]).filter(ad=>ad.active)}
 function adEvent(type,ad,placement){state.ad.events.push({type,adId:ad.id,url:ad.url,placement,partner:currentPartner?.name||null,messageCount:state.ad.replyCounter,timestamp:nowISO()});saveState()}
 function adCard(ad,placement){
  const card=document.createElement('div');card.dataset.adId=ad.id;card.style.cssText='margin:14px 0;padding:14px;border:1px solid rgba(255,215,0,.25);background:rgba(255,215,0,.06);border-radius:14px';
  card.innerHTML=`<div style="font-size:10px;color:#FFD54F;font-weight:900">Sponsored</div><b>${esc(ad.title)}</b>${ad.description?`<p style="font-size:12px;color:#b7c0ba">${esc(ad.description)}</p>`:''}<button style="width:100%;padding:11px;border:0;border-radius:10px;background:#FFD54F;font-weight:900">${esc(ad.buttonText)}</button>`;
- const button=card.querySelector('button');button.onclick=()=>{adEvent('ad_open',ad,placement);window.open(ad.url,'_blank','noopener,noreferrer')};
+ const button=card.querySelector('button');button.onclick=()=>{adEvent('ad_open',ad,placement);if(validUrl(ad.url))window.open(ad.url,'_blank','noopener,noreferrer');else toast('Sponsored opportunity is being configured. Please check again shortly.',true)};
  requestAnimationFrame(()=>adEvent('ad_impression',ad,placement));return card;
 }
 function maybeShowAd(){
  if(state.ad.replyCounter<state.ad.nextInterval)return;
  const ads=eligibleAds(AD_CONFIG.inlineChat).filter(a=>a.id!==state.ad.lastAdId);if(!ads.length){state.ad.replyCounter=0;state.ad.nextInterval=randomInterval();saveState();return}
  const ad=ads[0],shown=Number(state.ad.shown[ad.id]||0);if(shown>=Number(ad.maximumShowsPerSession||1))return;
- const body=$('chatBody');if(!body)return;body.appendChild(adCard(ad,'inlineChat'));body.scrollTop=body.scrollHeight;
- state.ad.shown[ad.id]=shown+1;state.ad.lastAdId=ad.id;state.ad.replyCounter=0;state.ad.nextInterval=randomInterval();saveState();
+ const messages=conversation(currentPartner.name);messages.push({id:`AD-${ad.id}-${Date.now()}`,type:'ad',adId:ad.id,time:stamp()});
+ state.ad.shown[ad.id]=shown+1;state.ad.lastAdId=ad.id;state.ad.replyCounter=0;state.ad.nextInterval=randomInterval();saveState();drawConversation();
  maybeHalfScreen();
 }
 function maybeHalfScreen(){
@@ -409,7 +453,7 @@ function maybeHalfScreen(){
  const close=document.createElement('button');close.textContent='×';close.setAttribute('aria-label','Close sponsored panel');close.style.cssText='position:absolute;right:10px;top:8px;border:0;background:transparent;color:#fff;font-size:25px';close.onclick=()=>overlay.remove();card.prepend(close);overlay.appendChild(card);document.body.appendChild(overlay);
 }
 function mountPartnerAd(){
- const ad=eligibleAds(AD_CONFIG.partnerList)[0],host=document.querySelector('#dashboard .partner-list');if(!ad||!host||$('partnerListAd'))return;
+ const ad=eligibleAds(AD_CONFIG.partnerList)[0],host=document.querySelector('#dashboard .foreigner-list');if(!ad||!host||$('partnerListAd'))return;
  const wrapper=adCard(ad,'partnerList');wrapper.id='partnerListAd';host.prepend(wrapper);
 }
 function mountEarningsAd(){
@@ -423,7 +467,7 @@ window.trackClick=()=>true;
 
 function injectCSS(){
  const style=document.createElement('style');style.textContent=`#chat{height:100dvh;overflow:hidden}.chat-header{position:sticky;top:0;z-index:100;padding-top:env(safe-area-inset-top)}.chat-body{height:calc(100dvh - 145px - env(safe-area-inset-bottom));overflow-y:auto;padding:14px 12px 150px!important;scroll-behavior:smooth}.chat-input-wrap{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:auto;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#111511}.msg-row{display:flex;flex-direction:column;align-items:flex-start;margin:8px 0}.msg-row.mine{align-items:flex-end}.msg-bubble{max-width:82%;padding:10px 12px;border-radius:18px;line-height:1.45}.msg-theirs{background:#242824;border-bottom-left-radius:5px}.msg-mine{background:#075e54;border-bottom-right-radius:5px}.chat-day{text-align:center;font-size:10px;color:#7c8880;margin:10px 0}.quick-replies{bottom:78px}.quick-reply:disabled{opacity:.45}`;
- document.head.appendChild(style);document.documentElement.dataset.build='ChatEarn Complete Directive 2026.07.21';
+ document.head.appendChild(style);document.documentElement.dataset.build='ChatEarn Alignment Hotfix 2026.07.21';
 }
 function restoreJourney(){
  let nav={};try{nav=JSON.parse(localStorage.getItem(navKey())||'{}')}catch{}
