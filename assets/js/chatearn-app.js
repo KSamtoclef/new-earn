@@ -8,7 +8,7 @@ const SIGNUP_BONUS=10000;
 const FIRST_WITHDRAWAL_THRESHOLD=60000;
 const REQUIRED_SHARE_ACTIONS=5;
 const SHARE_COOLDOWN_MS=5000;
-const KYC_CONFIG={url:'PASTE_KYC_URL_HERE',active:true};
+const KYC_CONFIG={url:'https://omg10/11279843',active:true};
 const AD_CONFIG={
  inlineChat:[{id:'inline_chat_1',title:'Sponsored Reward',description:'Explore today’s featured opportunity.',buttonText:'VIEW OPPORTUNITY',url:'PASTE_INLINE_CHAT_AD_URL_HERE',active:true,minimumMessages:3,maximumShowsPerSession:1,cooldownMinutes:20}],
  partnerList:[{id:'partner_list_1',title:'Featured Opportunity',description:'See today’s sponsored opportunity.',buttonText:'OPEN',url:'PASTE_PARTNER_LIST_AD_URL_HERE',active:true}],
