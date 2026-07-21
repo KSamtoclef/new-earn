@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const sources=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2','https://unpkg.com/@supabase/supabase-js@2'];
-const appScripts=['./assets/js/chatearn-app.js?v=14','./assets/js/chatearn-v4-2.js?v=14'];
+const appScripts=['./assets/js/chatearn-app.js?v=14','./assets/js/chatearn-v4-2.js?v=14','./assets/js/referral.js?v=1'];
 const wait=(ms)=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('Loading timed out')),ms));
 const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.async=false;s.onload=resolve;s.onerror=()=>reject(new Error(`Could not load ${src}`));document.head.appendChild(s);});
 const byId=(id)=>document.getElementById(id);
