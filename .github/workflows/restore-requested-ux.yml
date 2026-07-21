@@ -1,0 +1,80 @@
+name: Restore requested UX
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-requested-ux.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch production controller
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('assets/js/chatearn-app.js')
+          s=p.read_text()
+          s=s.replace('const REQUIRED_SHARES = 5;','const REQUIRED_SHARES = 8;')
+          s=s.replace("const SHARE_TEXT = `I’m earning on ChatEarn by completing rewarded chats. Join free: ${location.origin}`;","function shareText(){return `I currently have ${money(state.balance)} on ChatEarn from rewarded chats. Join free: ${location.origin}`;}")
+          s=s.replace("let progress=0; const timer=setInterval(()=>{progress+=20;if(fill)fill.style.width=`${progress}%`;if(progress>=100){clearInterval(timer);renderDashboard();goScreen('dashboard');setTimeout(()=>openChat(Math.floor(Math.random()*PARTNERS.length)),450);}},260);","let progress=0; const timer=setInterval(()=>{progress+=20;if(fill)fill.style.width=`${progress}%`;if(progress>=100){clearInterval(timer);openChat(isNew?0:Math.floor(Math.random()*PARTNERS.length));}},260);")
+          s=s.replace("byId('chatName').textContent=currentPartner.name;byId('chatAv').textContent=currentPartner.flag;byId('chatEarnBadge').textContent=`+${money(currentPartner.rate)}/reply`;\n  byId('chatStatus').textContent='🟢 Automated chat partner';","byId('chatName').textContent=currentPartner.name;const av=byId('chatAv');av.textContent=currentPartner.initials;av.style.background=currentPartner.color;byId('chatEarnBadge').textContent=`+${money(currentPartner.rate)}/reply`;\n  byId('chatStatus').textContent=`Guided chat · ${currentPartner.country}`;")
+          old="""function addBubble(text,type,reward=0){
+  const body=byId('chatBody'); if(!body)return;
+  const wrap=document.createElement('div');wrap.className=`msg-row ${type==='user'?'mine':''}`;
+  const bubble=document.createElement('div');bubble.className=`msg-bubble ${type==='user'?'msg-mine':'msg-theirs'}`;bubble.textContent=text;
+  if(reward){const earn=document.createElement('div');earn.className='msg-earned';earn.textContent=`+${money(reward)} Earned`;bubble.appendChild(earn);}
+  wrap.appendChild(bubble);body.appendChild(wrap);body.scrollTop=body.scrollHeight;
+}"""
+          new="""function addBubble(text,type,reward=0){
+  const body=byId('chatBody'); if(!body)return;
+  const wrap=document.createElement('div');wrap.className=`msg-row ${type==='user'?'mine':''}`;
+  const bubble=document.createElement('div');bubble.className=`msg-bubble ${type==='user'?'msg-mine':'msg-theirs'}`;bubble.textContent=text;
+  if(reward){const earn=document.createElement('div');earn.className='msg-earned';earn.textContent=`+${money(reward)} earned! 💰`;bubble.appendChild(earn);}
+  wrap.appendChild(bubble);
+  const meta=document.createElement('div');meta.className='msg-meta';meta.innerHTML=`${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${type==='user'?'<span class=\"msg-check\">✓✓</span>':''}`;wrap.appendChild(meta);
+  if(type==='partner'){const reactions=document.createElement('div');reactions.className='msg-reactions';reactions.innerHTML='<button type=\"button\">👍</button><button type=\"button\">❤️</button>';wrap.appendChild(reactions);}
+  body.appendChild(wrap);body.scrollTop=body.scrollHeight;
+}"""
+          if old not in s: raise SystemExit('bubble block not found')
+          s=s.replace(old,new)
+          anchor="window.handleEnter=handleEnter;\n"
+          extra="""window.handleEnter=handleEnter;
+function showWithdrawCTA(){
+  const chat=byId('chat');if(!chat)return;
+  let box=byId('chatWithdrawCta');
+  if(!box){box=document.createElement('div');box.id='chatWithdrawCta';box.className='chat-withdraw-cta';box.innerHTML=`<strong>${money(state.balance)} ready for withdrawal</strong><span>Your earnings are saved. Tap when you are ready.</span><button type=\"button\">Withdraw Now →</button>`;box.querySelector('button').onclick=()=>goScreen('earnings');chat.appendChild(box);}
+  chat.classList.add('locked');const input=byId('chatInput');if(input)input.disabled=true;
+}
+"""
+          s=s.replace(anchor,extra,1)
+          s=s.replace("if(!state.firstCycleComplete&&state.balance>=FIRST_CYCLE_LIMIT){notify(`You reached your first earning limit of ${money(FIRST_CYCLE_LIMIT)}. Withdraw to continue.`,true);goScreen('earnings');return;}","if(!state.firstCycleComplete&&state.balance>=FIRST_CYCLE_LIMIT){showWithdrawCTA();notify('Your first earning cycle is complete. Tap Withdraw Now when ready.');return;}")
+          s=s.replace("if(state.balance>=FIRST_CYCLE_LIMIT&&!state.firstCycleComplete){notify(`First earning cycle reached ${money(FIRST_CYCLE_LIMIT)}.`);setTimeout(()=>goScreen('earnings'),900);busy=false;input.disabled=false;return;}","if(state.balance>=FIRST_CYCLE_LIMIT&&!state.firstCycleComplete){notify(`${money(state.balance)} is ready. Tap Withdraw Now when ready.`);busy=false;showWithdrawCTA();return;}")
+          s=s.replace("window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT)}`","window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText())}`")
+          s=s.replace("function renderShare(){const pct=Math.min(100,Math.round(state.shares/REQUIRED_SHARES*100));if(byId('swPct'))byId('swPct').textContent=`${pct}%`;if(byId('swFill'))byId('swFill').style.width=`${pct}%`;if(byId('swStatus'))byId('swStatus').textContent=state.shares>=REQUIRED_SHARES?'Verification complete':`${REQUIRED_SHARES-state.shares} shares remaining`;if(byId('swBtnText'))byId('swBtnText').textContent=state.shares>=REQUIRED_SHARES?'Continue to KYC':'Share on WhatsApp to Verify';}","function renderShare(){const pct=Math.min(100,Math.round(state.shares/REQUIRED_SHARES*100));if(byId('swPct'))byId('swPct').textContent=`${pct}%`;if(byId('swFill'))byId('swFill').style.width=`${pct}%`;if(byId('swStatus'))byId('swStatus').textContent=state.shares>=REQUIRED_SHARES?'Referral target completed':`${REQUIRED_SHARES-state.shares} referrals remaining`;if(byId('swBtnText'))byId('swBtnText').textContent='Share on WhatsApp';const sub=byId('swHeroSub');if(sub)sub.innerHTML=`Share ChatEarn with up to <strong>${REQUIRED_SHARES} friends</strong>. Your withdrawal remains saved.`;if(!byId('continueKycBtn')){const b=document.createElement('button');b.id='continueKycBtn';b.className='processing-continue';b.textContent='Continue to KYC →';b.onclick=()=>goScreen('kyc');byId('sharewall')?.querySelector('.sw-body')?.appendChild(b);}}")
+          s=s.replace("if (id === 'withdraw') renderWithdraw();","if (id === 'withdraw') renderWithdraw();\n  if (id === 'processing' && !byId('processingContinueBtn')) { const note=document.createElement('p');note.textContent='Your withdrawal remains active while you continue chatting and earning.';note.style.cssText='text-align:center;color:#8d948f;padding:0 20px;margin-top:18px';const b=document.createElement('button');b.id='processingContinueBtn';b.className='processing-continue';b.textContent='← Return to Chats & Continue Earning';b.onclick=()=>goScreen('dashboard');target.append(note,b); }")
+          s=s.replace("async function boot(){\n  document.querySelector('.admin-shell')?.remove();","function installUX(){if(byId('ceUxStyle'))return;const st=document.createElement('style');st.id='ceUxStyle';st.textContent=`#chat{background:#0b0c0b}.chat-body{padding:70px 16px 190px!important}.msg-row{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:17px}.msg-row.mine{align-items:flex-end}.msg-bubble{max-width:78%;padding:13px 15px;border-radius:17px;font-size:16px;line-height:1.45}.msg-theirs{background:#1d1e1d;border-bottom-left-radius:5px}.msg-mine{background:#00c853;color:#041008;border-bottom-right-radius:5px}.msg-meta{font-size:10px;color:#666;margin-top:5px}.msg-check{color:#00d66a;margin-left:4px}.msg-earned{color:#00d66a;font-size:12px;font-weight:800;margin-top:7px}.msg-reactions{display:flex;gap:7px;margin-top:7px}.msg-reactions button{background:#252625;border:1px solid #3b3c3b;border-radius:15px;padding:4px 10px}.quick-replies{position:fixed!important;left:0;right:0;bottom:78px;z-index:31;display:flex!important;gap:9px;padding:9px 14px;overflow-x:auto;background:#0b0c0b;border-top:1px solid #252625}.quick-replies button{flex:0 0 auto;background:#171917!important;color:#78f5b3!important;border:1px solid #087b42!important;border-radius:22px!important;padding:9px 15px!important;font-weight:700}.chat-input-wrap{position:fixed!important;left:0;right:0;bottom:0;z-index:32}.chat-withdraw-cta{position:fixed;left:14px;right:14px;bottom:88px;z-index:36;background:#071d10;border:1px solid #00c853;border-radius:17px;padding:13px}.chat-withdraw-cta strong,.chat-withdraw-cta span{display:block}.chat-withdraw-cta span{color:#9ba49e;font-size:11px;margin:4px 0 10px}.chat-withdraw-cta button,.processing-continue{width:100%;border:0;border-radius:13px;padding:14px;background:#00c853;color:#041008;font-weight:900}.locked .quick-replies{display:none!important}.locked .chat-input-wrap{opacity:.45;pointer-events:none}.processing-continue{width:min(92%,680px);margin:18px auto}`;document.head.appendChild(st);}\nasync function boot(){\n  installUX();\n  document.querySelector('.admin-shell')?.remove();")
+          p.write_text(s)
+
+          b=Path('assets/js/bootstrap.js')
+          t=b.read_text().replace('chatearn-app.js?v=14','chatearn-app.js?v=15').replace('chatearn-v4-2.js?v=14','chatearn-v4-2.js?v=15')
+          b.write_text(t)
+          i=Path('index.html')
+          h=i.read_text().replace('bootstrap.js?v=14','bootstrap.js?v=15').replace('chatearn.css?v=14','chatearn.css?v=15')
+          h=h.replace('share ChatEarn with <strong>5 Nigerian friends</strong>','share ChatEarn with <strong>8 Nigerian friends</strong>').replace('Share with 5 friends to unlock your withdrawal','Share with 8 friends')
+          i.write_text(h)
+          PY
+      - name: Validate and commit
+        run: |
+          node --check assets/js/chatearn-app.js
+          node --check assets/js/bootstrap.js
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html assets/js/chatearn-app.js assets/js/bootstrap.js
+          git commit -m 'Restore requested chat withdrawal and referral UX'
+          git rm .github/workflows/restore-requested-ux.yml
+          git commit -m 'Remove one-time UX workflow'
+          git push origin main
