@@ -4,7 +4,7 @@ const SDK_SOURCES=[
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://unpkg.com/@supabase/supabase-js@2'
 ];
-const APP='./assets/js/chatearn-app.js?v=20260721';
+const APP='./assets/js/chatearn-app.js?v=20260721-complete';
 const byId=id=>document.getElementById(id);
 const timeout=ms=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('Loading timed out')),ms));
 const load=src=>new Promise((resolve,reject)=>{
